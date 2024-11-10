@@ -245,14 +245,11 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
 
     std::string constName;
     const char* constNamePtr = nullptr;
-    bool subtractFromOne = false;
 
     auto findResult = samplers.find(instr.constIndex);
     if (findResult != samplers.end())
     {
         constNamePtr = findResult->second;
-        subtractFromOne = strcmp(constNamePtr, "sampZBuffer") == 0 ||
-            strcmp(constNamePtr, "g_DepthSampler") == 0;
     }
     else
     {
@@ -277,8 +274,6 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
     {
     case FetchOpcode::TextureFetch:
     {
-        if (subtractFromOne)
-            out += "1.0 - ";
         out += "tfetch";
         break;
     }
@@ -1702,6 +1697,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
                     indent();
                     out += '}';
+                }
+                else
+                {
+                    out += "[flatten] if (g_ReverseZ) oPos.z = oPos.w - oPos.z;";
                 }
 
                 if (simpleControlFlow)

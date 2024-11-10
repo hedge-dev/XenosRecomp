@@ -23,6 +23,7 @@ IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool isPixelShad
     args[argCount++] = isPixelShader ? L"-T ps_6_0" : L"-T vs_6_0";
     args[argCount++] = L"-HV 2021";
     args[argCount++] = L"-all-resources-bound";
+    args[argCount++] = L"-ffinite-math-only";
 
     if (compileSpirv)
     {

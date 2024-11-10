@@ -20,6 +20,7 @@ struct PushConstants
 #define g_SwappedTexcoords         vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + 268)
 #define g_InputLayoutFlags         vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + 272)
 #define g_EnableGIBicubicFiltering vk::RawBufferLoad<bool>(g_PushConstants.SharedConstants + 276)
+#define g_ReverseZ                 vk::RawBufferLoad<bool>(g_PushConstants.SharedConstants + 280)
 
 #else
 
@@ -29,7 +30,8 @@ struct PushConstants
     uint g_Booleans : packoffset(c16.z); \
     uint g_SwappedTexcoords : packoffset(c16.w); \
     uint g_InputLayoutFlags : packoffset(c17.x); \
-    bool g_EnableGIBicubicFiltering : packoffset(c17.y)
+    bool g_EnableGIBicubicFiltering : packoffset(c17.y); \
+    bool g_ReverseZ : packoffset(c17.z)
 
 #endif
 
