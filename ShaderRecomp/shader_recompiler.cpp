@@ -1718,7 +1718,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                     indent();
                     out += "}";
                     indent();
-                    out += "else if (g_SpecConstants() & SPEC_CONSTANT_ALPHA_TEST)";
+                    out += "else if (g_SpecConstants() & SPEC_CONSTANT_ALPHA_TO_COVERAGE)";
                     indent();
                     out += '{';
 
