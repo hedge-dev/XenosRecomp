@@ -1130,8 +1130,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
             if (constantInfo->registerCount > 1)
             {
-                println("#define {}(INDEX) ((INDEX) < {} ? vk::RawBufferLoad<float4>(g_PushConstants.{}ShaderConstants + ({} + (INDEX)) * 16, 0x10) : 0.0)",
-                    constantName, constantInfo->registerCount.get(), shaderName, constantInfo->registerIndex.get());
+                uint32_t tailCount = (isPixelShader ? 224 : 256) - constantInfo->registerIndex;
+
+                println("#define {}(INDEX) select((INDEX) < {}, vk::RawBufferLoad<float4>(g_PushConstants.{}ShaderConstants + ({} + min(INDEX, {})) * 16, 0x10), 0.0)",
+                    constantName, tailCount, shaderName, constantInfo->registerIndex.get(), tailCount - 1);
             }
             else
             {
@@ -1185,7 +1187,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             println(" : packoffset(c{});", constantInfo->registerIndex.get());
 
             if (constantInfo->registerCount > 1)
-                println("#define {0}(INDEX) ((INDEX) < {1} ? {0}[INDEX] : 0.0)", constantName, constantInfo->registerCount.get());
+            {
+                uint32_t tailCount = (isPixelShader ? 224 : 256) - constantInfo->registerIndex;
+                println("#define {0}(INDEX) select((INDEX) < {1}, {0}[min(INDEX, {2})], 0.0)", constantName, tailCount, tailCount - 1);
+            }
         }
     }
 
