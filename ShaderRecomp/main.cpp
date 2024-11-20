@@ -26,6 +26,7 @@ struct RecompiledShader
     uint8_t* data = nullptr;
     IDxcBlob* dxil = nullptr;
     IDxcBlob* spirv = nullptr;
+    uint32_t specConstantsMask = 0;
 };
 
 int main(int argc, char** argv)
@@ -109,9 +110,11 @@ int main(int argc, char** argv)
                 recompiler = {};
                 recompiler.recompile(shader.data, include);
 
+                shader.specConstantsMask = recompiler.specConstantsMask;
+
                 thread_local DxcCompiler dxcCompiler;
-                shader.dxil = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, false);
-                shader.spirv = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, true);
+                shader.dxil = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, recompiler.specConstantsMask != 0, false);
+                shader.spirv = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, false, true);
 
                 assert(shader.dxil != nullptr && shader.spirv != nullptr);
                 assert(*(reinterpret_cast<uint32_t*>(shader.dxil->GetBufferPointer()) + 1) != 0 && "DXIL was not signed properly!");
@@ -132,8 +135,8 @@ int main(int argc, char** argv)
 
         for (auto& [hash, shader] : shaders)
         {
-            f.println("\t{{ 0x{:X}, {}, {}, {}, {} }},",
-                hash, dxil.size(), shader.dxil->GetBufferSize(), spirv.size(), shader.spirv->GetBufferSize());
+            f.println("\t{{ 0x{:X}, {}, {}, {}, {}, {} }},",
+                hash, dxil.size(), shader.dxil->GetBufferSize(), spirv.size(), shader.spirv->GetBufferSize(), shader.specConstantsMask);
 
             dxil.insert(dxil.end(), reinterpret_cast<uint8_t*>(shader.dxil->GetBufferPointer()),
                 reinterpret_cast<uint8_t*>(shader.dxil->GetBufferPointer()) + shader.dxil->GetBufferSize());    

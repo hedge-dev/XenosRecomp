@@ -1,7 +1,16 @@
+#ifndef SHADER_COMMON_H_INCLUDED
+#define SHADER_COMMON_H_INCLUDED
+
+#define SPEC_CONSTANT_R11G11B10_NORMAL  (1 << 0)
+#define SPEC_CONSTANT_HAS_BONE          (1 << 1)
+#define SPEC_CONSTANT_BICUBIC_GI_FILTER (1 << 2)
+#define SPEC_CONSTANT_ALPHA_TEST        (1 << 3)
+#define SPEC_CONSTANT_ALPHA_TO_COVERAGE (1 << 4)
+
+#if !defined(__cplusplus) || defined(__INTELLISENSE__)
+
 #define FLT_MIN asfloat(0xff7fffff)
 #define FLT_MAX asfloat(0x7f7fffff)
-
-#define INPUT_LAYOUT_FLAG_HAS_R11G11B10_NORMAL (1 << 0)
 
 #ifdef __spirv__
 
@@ -14,22 +23,22 @@ struct PushConstants
 
 [[vk::push_constant]] ConstantBuffer<PushConstants> g_PushConstants;
 
-#define g_AlphaTestMode            vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + 256)
-#define g_AlphaThreshold           vk::RawBufferLoad<float>(g_PushConstants.SharedConstants + 260)
-#define g_Booleans                 vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + 264)
-#define g_SwappedTexcoords         vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + 268)
-#define g_InputLayoutFlags         vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + 272)
-#define g_EnableGIBicubicFiltering vk::RawBufferLoad<bool>(g_PushConstants.SharedConstants + 276)
+#define g_Booleans                 vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + 256)
+#define g_SwappedTexcoords         vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + 260)
+#define g_AlphaThreshold           vk::RawBufferLoad<float>(g_PushConstants.SharedConstants + 264)
+
+[[vk::constant_id(0)]] const uint g_SpecConstants = 0;
+
+#define g_SpecConstants() g_SpecConstants
 
 #else
 
 #define DEFINE_SHARED_CONSTANTS() \
-    uint g_AlphaTestMode : packoffset(c16.x); \
-    float g_AlphaThreshold : packoffset(c16.y); \
-    uint g_Booleans : packoffset(c16.z); \
-    uint g_SwappedTexcoords : packoffset(c16.w); \
-    uint g_InputLayoutFlags : packoffset(c17.x); \
-    bool g_EnableGIBicubicFiltering : packoffset(c17.y)
+    uint g_Booleans : packoffset(c16.x); \
+    uint g_SwappedTexcoords : packoffset(c16.y); \
+    float g_AlphaThreshold : packoffset(c16.z) \
+
+uint g_SpecConstants();
 
 #endif
 
@@ -145,9 +154,9 @@ float4 tfetchCube(uint resourceDescriptorIndex, uint samplerDescriptorIndex, flo
     return g_TextureCubeDescriptorHeap[resourceDescriptorIndex].Sample(g_SamplerDescriptorHeap[samplerDescriptorIndex], cubeMapData.cubeMapDirections[texCoord.z]);
 }
 
-float4 tfetchR11G11B10(uint inputLayoutFlags, uint4 value)
+float4 tfetchR11G11B10(uint4 value)
 {
-    if (inputLayoutFlags & INPUT_LAYOUT_FLAG_HAS_R11G11B10_NORMAL)
+    if (g_SpecConstants() & SPEC_CONSTANT_R11G11B10_NORMAL)
     {
         return float4(
             (value.x & 0x00000400 ? -1.0 : 0.0) + ((value.x & 0x3FF) / 1024.0),
@@ -163,7 +172,7 @@ float4 tfetchR11G11B10(uint inputLayoutFlags, uint4 value)
 
 float4 tfetchTexcoord(uint swappedTexcoords, float4 value, uint semanticIndex)
 {
-    return (swappedTexcoords & (1 << semanticIndex)) != 0 ? value.yxwz : value;
+    return (swappedTexcoords & (1ull << semanticIndex)) != 0 ? value.yxwz : value;
 }
 
 float4 cube(float4 value, inout CubeMapData cubeMapData)
@@ -202,3 +211,7 @@ float computeMipLevel(float2 pixelCoord)
     float deltaMaxSqr = max(dot(dx, dx), dot(dy, dy));
     return max(0.0, 0.5 * log2(deltaMaxSqr));
 }
+
+#endif
+
+#endif

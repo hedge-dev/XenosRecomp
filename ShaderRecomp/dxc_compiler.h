@@ -7,5 +7,5 @@ struct DxcCompiler
     DxcCompiler();
     ~DxcCompiler();
 
-    IDxcBlob* compile(const std::string& shaderSource, bool isPixelShader, bool compileSpirv);
+    IDxcBlob* compile(const std::string& shaderSource, bool compilePixelShader, bool compileLibrary, bool compileSpirv);
 };

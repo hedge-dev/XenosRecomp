@@ -32,6 +32,7 @@ struct ShaderRecompiler : StringBuffer
     std::unordered_map<uint32_t, const char*> boolConstants;
     std::unordered_map<uint32_t, const char*> samplers;
     std::unordered_map<uint32_t, uint32_t> ifEndLabels;
+    uint32_t specConstantsMask = 0;
 
     void indent()
     {

@@ -11,7 +11,7 @@ DxcCompiler::~DxcCompiler()
     dxcCompiler->Release();
 }
 
-IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool isPixelShader, bool compileSpirv)
+IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool compilePixelShader, bool compileLibrary, bool compileSpirv)
 {
     DxcBuffer source{};
     source.Ptr = shaderSource.c_str();
@@ -20,7 +20,21 @@ IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool isPixelShad
     const wchar_t* args[16]{};
     uint32_t argCount = 0;
 
-    args[argCount++] = isPixelShader ? L"-T ps_6_0" : L"-T vs_6_0";
+    const wchar_t* target = nullptr;
+    if (compileLibrary)
+    {
+        assert(!compileSpirv);
+        target = L"-T lib_6_3";
+    }
+    else
+    {
+        if (compilePixelShader)
+            target = L"-T ps_6_0";
+        else
+            target = L"-T vs_6_0";
+    }
+
+    args[argCount++] = target;
     args[argCount++] = L"-HV 2021";
     args[argCount++] = L"-all-resources-bound";
 
@@ -29,7 +43,7 @@ IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool isPixelShad
         args[argCount++] = L"-spirv";
         args[argCount++] = L"-fvk-use-dx-layout";
 
-        if (!isPixelShader)
+        if (!compilePixelShader)
             args[argCount++] = L"-fvk-invert-y";
     }
     else

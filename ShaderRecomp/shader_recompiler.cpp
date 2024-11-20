@@ -1,4 +1,5 @@
 #include "shader_recompiler.h"
+#include "shader_common.h"
 
 static constexpr char SWIZZLES[] = 
 { 
@@ -182,7 +183,8 @@ void ShaderRecompiler::recompile(const VertexFetchInstruction& instr, uint32_t a
     case DeclUsage::Normal:
     case DeclUsage::Tangent:
     case DeclUsage::Binormal:
-        print("tfetchR11G11B10(g_InputLayoutFlags, ");
+        specConstantsMask |= SPEC_CONSTANT_R11G11B10_NORMAL;
+        print("tfetchR11G11B10(");
         break;
 
     case DeclUsage::TexCoord:
@@ -1199,6 +1201,15 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
     const auto shader = reinterpret_cast<const Shader*>(shaderData + shaderContainer->shaderOffset);
 
+    out += "#ifndef __spirv__\n";
+
+    if (isPixelShader)
+        out += "[shader(\"pixel\")]\n";
+    else
+        out += "[shader(\"vertex\")]\n";
+
+    out += "#endif\n";
+
     out += "void main(\n";
 
     if (isPixelShader)
@@ -1208,7 +1219,11 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
         for (auto& [usage, usageIndex] : INTERPOLATORS)
             println("\tin float4 i{0}{1} : {2}{1},", USAGE_VARIABLES[uint32_t(usage)], usageIndex, USAGE_SEMANTICS[uint32_t(usage)]);
 
-        out += "\tin bool iFace : SV_IsFrontFace";
+        out += "#ifdef __spirv__\n";
+        out += "\tin bool iFace : SV_IsFrontFace\n";
+        out += "#else\n";
+        out += "\tin uint iFace : SV_IsFrontFace\n";
+        out += "#endif\n";
 
         auto pixelShader = reinterpret_cast<const PixelShader*>(shader);
         if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR0)
@@ -1582,11 +1597,19 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                     }
                     else
                     {
-                        auto findResult = boolConstants.find(cfInstr.condJmp.boolAddress);
-                        if (findResult != boolConstants.end())
-                            println("if ((g_Booleans & {}) {}= 0)", findResult->second, cfInstr.condJmp.condition ^ simpleControlFlow ? "!" : "=");
+                        if (!isPixelShader && cfInstr.condJmp.boolAddress == 0) // mrgHasBone
+                        {
+                            specConstantsMask |= SPEC_CONSTANT_HAS_BONE;
+                            println("if ((g_SpecConstants() & SPEC_CONSTANT_HAS_BONE) {}= 0)", cfInstr.condJmp.condition ^ simpleControlFlow ? "!" : "=");
+                        }
                         else
-                            println("if (b{} {}= 0)", uint32_t(cfInstr.condJmp.boolAddress), cfInstr.condJmp.condition ^ simpleControlFlow ? "!" : "=");
+                        {
+                            auto findResult = boolConstants.find(cfInstr.condJmp.boolAddress);
+                            if (findResult != boolConstants.end())
+                                println("if ((g_Booleans & {}) {}= 0)", findResult->second, cfInstr.condJmp.condition ^ simpleControlFlow ? "!" : "=");
+                            else
+                                println("if (b{} {}= 0)", uint32_t(cfInstr.condJmp.boolAddress), cfInstr.condJmp.condition ^ simpleControlFlow ? "!" : "=");
+                        }
                     }
 
                     if (simpleControlFlow)
@@ -1638,8 +1661,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                     {
                         if (textureFetch.constIndex == 10) // g_GISampler
                         {
+                            specConstantsMask |= SPEC_CONSTANT_BICUBIC_GI_FILTER;
+
                             indent();
-                            out += "[branch] if (g_EnableGIBicubicFiltering)";
+                            out += "if (g_SpecConstants() & SPEC_CONSTANT_BICUBIC_GI_FILTER)";
                             indent();
                             out += '{';
 
@@ -1680,8 +1705,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             {
                 if (isPixelShader)
                 {
+                    specConstantsMask |= (SPEC_CONSTANT_ALPHA_TEST | SPEC_CONSTANT_ALPHA_TO_COVERAGE);
+
                     indent();
-                    out += "[branch] if (g_AlphaTestMode == 1)";
+                    out += "[branch] if (g_SpecConstants() & SPEC_CONSTANT_ALPHA_TEST)";
                     indent();
                     out += '{';
 
@@ -1691,7 +1718,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                     indent();
                     out += "}";
                     indent();
-                    out += "else if (g_AlphaTestMode == 2)";
+                    out += "else if (g_SpecConstants() & SPEC_CONSTANT_ALPHA_TEST)";
                     indent();
                     out += '{';
 
