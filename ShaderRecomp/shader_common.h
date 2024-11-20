@@ -6,6 +6,7 @@
 #define SPEC_CONSTANT_BICUBIC_GI_FILTER (1 << 2)
 #define SPEC_CONSTANT_ALPHA_TEST        (1 << 3)
 #define SPEC_CONSTANT_ALPHA_TO_COVERAGE (1 << 4)
+#define SPEC_CONSTANT_REVERSE_Z         (1 << 5)
 
 #if !defined(__cplusplus) || defined(__INTELLISENSE__)
 
