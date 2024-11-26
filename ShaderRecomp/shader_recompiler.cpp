@@ -1653,19 +1653,11 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                     }
                     else
                     {
-                        if (!isPixelShader && cfInstr.condJmp.boolAddress == 0) // mrgHasBone
-                        {
-                            specConstantsMask |= SPEC_CONSTANT_HAS_BONE;
-                            println("if ((g_SpecConstants() & SPEC_CONSTANT_HAS_BONE) {}= 0)", cfInstr.condJmp.condition ^ simpleControlFlow ? "!" : "=");
-                        }
+                        auto findResult = boolConstants.find(cfInstr.condJmp.boolAddress);
+                        if (findResult != boolConstants.end())
+                            println("if ((g_Booleans & {}) {}= 0)", findResult->second, cfInstr.condJmp.condition ^ simpleControlFlow ? "!" : "=");
                         else
-                        {
-                            auto findResult = boolConstants.find(cfInstr.condJmp.boolAddress);
-                            if (findResult != boolConstants.end())
-                                println("if ((g_Booleans & {}) {}= 0)", findResult->second, cfInstr.condJmp.condition ^ simpleControlFlow ? "!" : "=");
-                            else
-                                println("if (b{} {}= 0)", uint32_t(cfInstr.condJmp.boolAddress), cfInstr.condJmp.condition ^ simpleControlFlow ? "!" : "=");
-                        }
+                            println("if (b{} {}= 0)", uint32_t(cfInstr.condJmp.boolAddress), cfInstr.condJmp.condition ^ simpleControlFlow ? "!" : "=");
                     }
 
                     if (simpleControlFlow)

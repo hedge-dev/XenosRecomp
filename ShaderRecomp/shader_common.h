@@ -2,11 +2,10 @@
 #define SHADER_COMMON_H_INCLUDED
 
 #define SPEC_CONSTANT_R11G11B10_NORMAL  (1 << 0)
-#define SPEC_CONSTANT_HAS_BONE          (1 << 1)
-#define SPEC_CONSTANT_BICUBIC_GI_FILTER (1 << 2)
-#define SPEC_CONSTANT_ALPHA_TEST        (1 << 3)
-#define SPEC_CONSTANT_ALPHA_TO_COVERAGE (1 << 4)
-#define SPEC_CONSTANT_REVERSE_Z         (1 << 5)
+#define SPEC_CONSTANT_BICUBIC_GI_FILTER (1 << 1)
+#define SPEC_CONSTANT_ALPHA_TEST        (1 << 2)
+#define SPEC_CONSTANT_ALPHA_TO_COVERAGE (1 << 3)
+#define SPEC_CONSTANT_REVERSE_Z         (1 << 4)
 
 #if !defined(__cplusplus) || defined(__INTELLISENSE__)
 
