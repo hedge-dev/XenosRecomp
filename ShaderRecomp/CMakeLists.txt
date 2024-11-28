@@ -1,5 +1,7 @@
 project(ShaderRecomp)
 
+set(SMOLV_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/smol-v/source")
+
 add_executable(ShaderRecomp 
     constant_table.h
     dxc_compiler.cpp
@@ -9,7 +11,8 @@ add_executable(ShaderRecomp
     shader.h
     shader_code.h
     shader_recompiler.cpp
-    shader_recompiler.h)
+    shader_recompiler.h
+    "${SMOLV_SOURCE_DIR}/smolv.cpp")
 
 find_package(directx-dxc CONFIG REQUIRED)
 find_package(xxhash CONFIG REQUIRED)
@@ -19,6 +22,8 @@ target_link_libraries(ShaderRecomp PRIVATE
     Microsoft::DirectXShaderCompiler
     xxHash::xxhash
     $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+
+target_include_directories(ShaderRecomp PRIVATE ${SMOLV_SOURCE_DIR})
 
 target_precompile_headers(ShaderRecomp PRIVATE pch.h)
 

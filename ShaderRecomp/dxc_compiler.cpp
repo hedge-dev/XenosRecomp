@@ -17,7 +17,7 @@ IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool compilePixe
     source.Ptr = shaderSource.c_str();
     source.Size = shaderSource.size();
 
-    const wchar_t* args[16]{};
+    const wchar_t* args[32]{};
     uint32_t argCount = 0;
 
     const wchar_t* target = nullptr;
@@ -49,7 +49,10 @@ IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool compilePixe
     else
     {
         args[argCount++] = L"-Wno-ignored-attributes";
+        args[argCount++] = L"-Qstrip_reflect";
     }
+
+    args[argCount++] = L"-Qstrip_debug";
 
     IDxcResult* result = nullptr;
     HRESULT hr = dxcCompiler->Compile(&source, args, argCount, nullptr, IID_PPV_ARGS(&result));

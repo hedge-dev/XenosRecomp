@@ -25,7 +25,7 @@ struct RecompiledShader
 {
     uint8_t* data = nullptr;
     IDxcBlob* dxil = nullptr;
-    IDxcBlob* spirv = nullptr;
+    std::vector<uint8_t> spirv;
     uint32_t specConstantsMask = 0;
 };
 
@@ -114,10 +114,15 @@ int main(int argc, char** argv)
 
                 thread_local DxcCompiler dxcCompiler;
                 shader.dxil = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, recompiler.specConstantsMask != 0, false);
-                shader.spirv = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, false, true);
+                IDxcBlob* spirv = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, false, true);
 
-                assert(shader.dxil != nullptr && shader.spirv != nullptr);
+                assert(shader.dxil != nullptr && spirv != nullptr);
                 assert(*(reinterpret_cast<uint32_t*>(shader.dxil->GetBufferPointer()) + 1) != 0 && "DXIL was not signed properly!");
+
+                bool result = smolv::Encode(spirv->GetBufferPointer(), spirv->GetBufferSize(), shader.spirv, smolv::kEncodeFlagStripDebugInfo);
+                assert(result);
+
+                spirv->Release();
 
                 size_t currentProgress = ++progress;
                 if ((currentProgress % 10) == 0 || (currentProgress == shaders.size() - 1))
@@ -136,13 +141,12 @@ int main(int argc, char** argv)
         for (auto& [hash, shader] : shaders)
         {
             f.println("\t{{ 0x{:X}, {}, {}, {}, {}, {} }},",
-                hash, dxil.size(), shader.dxil->GetBufferSize(), spirv.size(), shader.spirv->GetBufferSize(), shader.specConstantsMask);
+                hash, dxil.size(), shader.dxil->GetBufferSize(), spirv.size(), shader.spirv.size(), shader.specConstantsMask);
 
             dxil.insert(dxil.end(), reinterpret_cast<uint8_t*>(shader.dxil->GetBufferPointer()),
                 reinterpret_cast<uint8_t*>(shader.dxil->GetBufferPointer()) + shader.dxil->GetBufferSize());    
             
-            spirv.insert(spirv.end(), reinterpret_cast<uint8_t*>(shader.spirv->GetBufferPointer()),
-                reinterpret_cast<uint8_t*>(shader.spirv->GetBufferPointer()) + shader.spirv->GetBufferSize());
+            spirv.insert(spirv.end(), shader.spirv.begin(), shader.spirv.end());
         }
 
         f.println("}};");

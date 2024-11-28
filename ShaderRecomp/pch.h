@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <xxhash.h>
 #include <zstd.h>
+#include <smolv.h>
 
 template<typename T>
 struct be
