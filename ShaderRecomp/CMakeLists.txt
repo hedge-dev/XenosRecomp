@@ -40,6 +40,8 @@ endif()
 if (WIN32)
     target_compile_definitions(ShaderRecomp PRIVATE _CRT_SECURE_NO_WARNINGS)
     file(COPY ${PACKAGE_PREFIX_DIR}/bin/dxil.dll DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+else()
+    set_target_properties(Microsoft::DXIL PROPERTIES IMPORTED_LOCATION ${PACKAGE_PREFIX_DIR}/lib/libdxil.so)
 endif()
 
 if (SHADER_RECOMP_DXIL)
