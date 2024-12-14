@@ -113,11 +113,15 @@ int main(int argc, char** argv)
                 shader.specConstantsMask = recompiler.specConstantsMask;
 
                 thread_local DxcCompiler dxcCompiler;
-                shader.dxil = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, recompiler.specConstantsMask != 0, false);
-                IDxcBlob* spirv = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, false, true);
 
-                assert(shader.dxil != nullptr && spirv != nullptr);
-                assert(*(reinterpret_cast<uint32_t*>(shader.dxil->GetBufferPointer()) + 1) != 0 && "DXIL was not signed properly!");
+#if defined(SHADERRECOMP_DXIL)
+                shader.dxil = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, recompiler.specConstantsMask != 0, false);
+                assert(shader.dxil != nullptr);
+                assert(*(reinterpret_cast<uint32_t *>(shader.dxil->GetBufferPointer()) + 1) != 0 && "DXIL was not signed properly!");
+#endif
+
+                IDxcBlob* spirv = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, false, true);
+                assert(spirv != nullptr);
 
                 bool result = smolv::Encode(spirv->GetBufferPointer(), spirv->GetBufferSize(), shader.spirv, smolv::kEncodeFlagStripDebugInfo);
                 assert(result);
@@ -141,10 +145,13 @@ int main(int argc, char** argv)
         for (auto& [hash, shader] : shaders)
         {
             f.println("\t{{ 0x{:X}, {}, {}, {}, {}, {} }},",
-                hash, dxil.size(), shader.dxil->GetBufferSize(), spirv.size(), shader.spirv.size(), shader.specConstantsMask);
+                hash, dxil.size(), (shader.dxil != nullptr) ? shader.dxil->GetBufferSize() : 0, spirv.size(), shader.spirv.size(), shader.specConstantsMask);
 
-            dxil.insert(dxil.end(), reinterpret_cast<uint8_t*>(shader.dxil->GetBufferPointer()),
-                reinterpret_cast<uint8_t*>(shader.dxil->GetBufferPointer()) + shader.dxil->GetBufferSize());    
+            if (shader.dxil != nullptr)
+            {
+                dxil.insert(dxil.end(), reinterpret_cast<uint8_t *>(shader.dxil->GetBufferPointer()),
+                    reinterpret_cast<uint8_t *>(shader.dxil->GetBufferPointer()) + shader.dxil->GetBufferSize());
+            }
             
             spirv.insert(spirv.end(), shader.spirv.begin(), shader.spirv.end());
         }
@@ -154,7 +161,8 @@ int main(int argc, char** argv)
         fmt::println("Compressing DXIL cache...");
 
         int level = ZSTD_maxCLevel();
-        //level = ZSTD_defaultCLevel();
+
+#if defined(SHADERRECOMP_DXIL)
         std::vector<uint8_t> dxilCompressed(ZSTD_compressBound(dxil.size()));
         dxilCompressed.resize(ZSTD_compress(dxilCompressed.data(), dxilCompressed.size(), dxil.data(), dxil.size(), level));
 
@@ -164,6 +172,9 @@ int main(int argc, char** argv)
             f.print("{},", data);
 
         f.println("}};");
+        f.println("const size_t g_dxilCacheCompressedSize = {};", dxilCompressed.size());
+        f.println("const size_t g_dxilCacheDecompressedSize = {};", dxil.size());
+#endif
 
         fmt::println("Compressing SPIRV cache...");
 
@@ -177,11 +188,9 @@ int main(int argc, char** argv)
 
         f.println("}};");
 
-        f.println("const size_t g_shaderCacheEntryCount = {};", shaders.size());
-        f.println("const size_t g_dxilCacheCompressedSize = {};", dxilCompressed.size());
-        f.println("const size_t g_dxilCacheDecompressedSize = {};", dxil.size());
         f.println("const size_t g_spirvCacheCompressedSize = {};", spirvCompressed.size());
         f.println("const size_t g_spirvCacheDecompressedSize = {};", spirv.size());
+        f.println("const size_t g_shaderCacheEntryCount = {};", shaders.size());
 
         writeAllBytes(output, f.out.data(), f.out.size());
     }

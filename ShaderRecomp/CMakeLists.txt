@@ -1,5 +1,9 @@
 project(ShaderRecomp)
 
+if (WIN32)
+    option(SHADERRECOMP_DXIL "Generate DXIL shader cache" ON)
+endif()
+
 set(SMOLV_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/smol-v/source")
 
 add_executable(ShaderRecomp 
@@ -34,5 +38,9 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 
 target_compile_definitions(ShaderRecomp PRIVATE _CRT_SECURE_NO_WARNINGS)
+
+if (SHADERRECOMP_DXIL)
+    target_compile_definitions(ShaderRecomp PRIVATE SHADERRECOMP_DXIL)
+endif()
 
 file(COPY ${PACKAGE_PREFIX_DIR}/bin/dxil.dll DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
