@@ -114,7 +114,7 @@ int main(int argc, char** argv)
 
                 thread_local DxcCompiler dxcCompiler;
 
-#if defined(SHADERRECOMP_DXIL)
+#ifdef SHADERRECOMP_DXIL
                 shader.dxil = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, recompiler.specConstantsMask != 0, false);
                 assert(shader.dxil != nullptr);
                 assert(*(reinterpret_cast<uint32_t *>(shader.dxil->GetBufferPointer()) + 1) != 0 && "DXIL was not signed properly!");
@@ -162,7 +162,7 @@ int main(int argc, char** argv)
 
         int level = ZSTD_maxCLevel();
 
-#if defined(SHADERRECOMP_DXIL)
+#ifdef SHADERRECOMP_DXIL
         std::vector<uint8_t> dxilCompressed(ZSTD_compressBound(dxil.size()));
         dxilCompressed.resize(ZSTD_compress(dxilCompressed.data(), dxilCompressed.size(), dxil.data(), dxil.size(), level));
 
