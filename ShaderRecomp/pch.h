@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 #include <dxcapi.h>
 
 #include <bit>
