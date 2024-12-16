@@ -34,7 +34,7 @@ target_include_directories(ShaderRecomp PRIVATE ${SMOLV_SOURCE_DIR})
 target_precompile_headers(ShaderRecomp PRIVATE pch.h)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(ShaderRecomp PRIVATE -Wno-switch -Wno-unused-variable)
+    target_compile_options(ShaderRecomp PRIVATE -Wno-switch -Wno-unused-variable -Wno-null-arithmetic -fms-extensions)
 endif()
 
 if (WIN32)
