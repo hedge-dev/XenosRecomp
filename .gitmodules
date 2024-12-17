@@ -1,3 +1,12 @@
 [submodule "thirdparty/smol-v"]
 	path = thirdparty/smol-v
 	url = https://github.com/aras-p/smol-v
+[submodule "thirdparty/zstd"]
+	path = thirdparty/zstd
+	url = https://github.com/facebook/zstd.git
+[submodule "thirdparty/xxHash"]
+	path = thirdparty/xxHash
+	url = https://github.com/Cyan4973/xxHash.git
+[submodule "thirdparty/fmt"]
+	path = thirdparty/fmt
+	url = https://github.com/fmtlib/fmt.git

@@ -19,14 +19,12 @@ add_executable(ShaderRecomp
     "${SMOLV_SOURCE_DIR}/smolv.cpp")
 
 find_package(directx-dxc CONFIG REQUIRED)
-find_package(xxHash CONFIG REQUIRED)
-find_package(zstd CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
 
 target_link_libraries(ShaderRecomp PRIVATE
     Microsoft::DirectXShaderCompiler
+    Microsoft::DXIL
     xxHash::xxhash
-    $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>
+    libzstd_static
     fmt::fmt)
 
 target_include_directories(ShaderRecomp PRIVATE ${SMOLV_SOURCE_DIR})
@@ -39,9 +37,8 @@ endif()
 
 if (WIN32)
     target_compile_definitions(ShaderRecomp PRIVATE _CRT_SECURE_NO_WARNINGS)
-    file(COPY ${PACKAGE_PREFIX_DIR}/bin/dxil.dll DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-else()
-    set_target_properties(Microsoft::DXIL PROPERTIES IMPORTED_LOCATION ${PACKAGE_PREFIX_DIR}/lib/libdxil.so)
+    find_file(DIRECTX_DXIL_LIBRARY "dxil.dll")
+    file(COPY ${DIRECTX_DXIL_LIBRARY} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
 if (SHADER_RECOMP_DXIL)

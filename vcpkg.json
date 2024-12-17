@@ -1,9 +1,6 @@
 {
-    "builtin-baseline": "e63bd09dc0b7204467705c1c7c71d0e2a3f8860b",
+    "builtin-baseline": "b322364f06308bdd24823f9d8f03fe0cc86fd46f",
     "dependencies": [
-        "directx-dxc",
-        "fmt",
-        "xxhash",
-        "zstd"
+        "directx-dxc"
     ]
 }
