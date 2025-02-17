@@ -74,6 +74,7 @@ struct DeclUsageLocation
     uint32_t location;
 };
 
+// NOTE: These are specialized Vulkan locations for Unleashed Recompiled. Change as necessary. Likely not going to work with other games.
 static constexpr DeclUsageLocation USAGE_LOCATIONS[] =
 {
     { DeclUsage::Position, 0, 0 },
@@ -247,13 +248,18 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
 
     std::string constName;
     const char* constNamePtr = nullptr;
+#ifdef UNLEASHED_RECOMP
     bool subtractFromOne = false;
+#endif
 
     auto findResult = samplers.find(instr.constIndex);
     if (findResult != samplers.end())
     {
         constNamePtr = findResult->second;
+
+    #ifdef UNLEASHED_RECOMP
         subtractFromOne = hasMtxPrevInvViewProjection && strcmp(constNamePtr, "sampZBuffer") == 0;
+    #endif
     }
     else
     {
@@ -261,6 +267,7 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
         constNamePtr = constName.c_str();
     }
 
+#ifdef UNLEASHED_RECOMP
     if (instr.constIndex == 0 && instr.dimension == TextureDimension::Texture2D)
     {
         indent();
@@ -268,6 +275,7 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
         printSrcRegister(2);
         out += ");\n";
     }
+#endif
 
     indent();
     print("r{}.", instr.dstRegister);
@@ -278,8 +286,11 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
     {
     case FetchOpcode::TextureFetch:
     {
+    #ifdef UNLEASHED_RECOMP
         if (subtractFromOne)
             out += "1.0 - ";
+    #endif
+
         out += "tfetch";
         break;
     }
@@ -314,8 +325,11 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
     }
 
     out += dimension;
+
+#ifdef UNLEASHED_RECOMP
     if (bicubic)
         out += "Bicubic";
+#endif
 
     print("({0}_Texture{1}DescriptorIndex, {0}_SamplerDescriptorIndex, ", constNamePtr, dimension);
     printSrcRegister(componentCount);
@@ -447,12 +461,14 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
                     const char* constantName = reinterpret_cast<const char*>(constantTableData + findResult->second->name);
                     if (findResult->second->registerCount > 1)
                     {
+                    #ifdef UNLEASHED_RECOMP
                         if (hasMtxProjection && strcmp(constantName, "g_MtxProjection") == 0)
                         {
                             regFormatted = fmt::format("(iterationIndex == 0 ? mtxProjectionReverseZ[{0}] : mtxProjection[{0}])",
                                 reg - findResult->second->registerIndex);
                         }
                         else
+                    #endif
                         {
                             regFormatted = fmt::format("{}({}{})", constantName,
                                 reg - findResult->second->registerIndex, instr.const0Relative ? (instr.constAddressRegisterRelative ? " + a0" : " + aL") : "");
@@ -592,6 +608,7 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
             case ExportRegister::VSPosition:
                 exportRegister = "oPos";
 
+            #ifdef UNLEASHED_RECOMP
                 if (hasMtxProjection)
                 {
                     indent();
@@ -602,6 +619,7 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
 
                     closeIfBracket = true;
                 }
+            #endif
 
                 break;
 
@@ -1097,8 +1115,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
     out += "#ifdef __spirv__\n\n";
 
+#ifdef UNLEASHED_RECOMP
     bool isMetaInstancer = false;
     bool hasIndexCount = false;
+#endif
 
     for (uint32_t i = 0; i < constantTableContainer->constantTable.constants; i++)
     {
@@ -1107,6 +1127,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
         const char* constantName = reinterpret_cast<const char*>(constantTableData + constantInfo->name);
 
+    #ifdef UNLEASHED_RECOMP
         if (!isPixelShader)
         {
             if (strcmp(constantName, "g_MtxProjection") == 0)
@@ -1121,6 +1142,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             if (strcmp(constantName, "g_MtxPrevInvViewProjection") == 0)
                 hasMtxPrevInvViewProjection = true;
         }
+    #endif
 
         switch (constantInfo->registerSet)
         {
@@ -1292,11 +1314,13 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
             const char* usageType = USAGE_TYPES[uint32_t(vertexElement.usage)];
 
+        #ifdef UNLEASHED_RECOMP
             if ((vertexElement.usage == DeclUsage::TexCoord && vertexElement.usageIndex == 2 && isMetaInstancer) ||
                 (vertexElement.usage == DeclUsage::Position && vertexElement.usageIndex == 1))
             {
                 usageType = "uint4";
             }
+        #endif
 
             out += '\t';
 
@@ -1315,11 +1339,14 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             vertexElements.emplace(uint32_t(vertexElement.address), vertexElement);
         }
 
+    #ifdef UNLEASHED_RECOMP
         if (hasIndexCount)
         {
             out += "\tin uint iVertexId : SV_VertexID,\n";
             out += "\tin uint iInstanceId : SV_InstanceID,\n";
         }
+    #endif
+
         out += "\tout float4 oPos : SV_Position";
 
         for (auto& [usage, usageIndex] : INTERPOLATORS)
@@ -1329,7 +1356,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
     out += ")\n";
     out += "{\n";
 
-
+#ifdef UNLEASHED_RECOMP
     if (hasMtxProjection)
     {
         specConstantsMask |= SPEC_CONSTANT_REVERSE_Z;
@@ -1342,6 +1369,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
         out += "\t[unroll] for (int iterationIndex = 0; iterationIndex < 2; iterationIndex++)\n";
         out += "\t{\n";
     }
+#endif
 
     if (shaderContainer->definitionTableOffset != NULL)
     {
@@ -1418,8 +1446,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
     if (!isPixelShader)
     {
+    #ifdef UNLEASHED_RECOMP
         if (!hasMtxProjection)
             out += "\toPos = 0.0;\n";
+    #endif
 
         for (auto& [usage, usageIndex] : INTERPOLATORS)
             println("\to{}{} = 0.0;", USAGE_VARIABLES[uint32_t(usage)], usageIndex);
@@ -1436,10 +1466,12 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             {
                 out += "float4((iPos.xy - 0.5) * float2(iFace ? 1.0 : -1.0, 1.0), 0.0, 0.0);\n";
             }
+        #ifdef UNLEASHED_RECOMP
             else if (!isPixelShader && hasIndexCount && i == 0)
             {
                 out += "float4(iVertexId + g_IndexCount.x * iInstanceId, 0.0, 0.0, 0.0);\n";
             }
+        #endif
             else
             {
                 out += "0.0;\n";
@@ -1453,7 +1485,9 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
     out += "\tfloat ps = 0.0;\n";
     if (isPixelShader)
     {
+#ifdef UNLEASHED_RECOMP
         out += "\tfloat2 pixelCoord = 0.0;\n";
+#endif
         out += "\tCubeMapData cubeMapData = (CubeMapData)0;\n";
     }
 
@@ -1611,7 +1645,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                 if (simpleControlFlow)
                 {
                     indent();
-                    println("[unroll] for (aL = 0; aL < i{}.x; aL++)", uint32_t(cfInstr.loopStart.loopId));
+                #ifdef UNLEASHED_RECOMP
+                    print("[unroll] ")
+                #endif
+                    println("for (aL = 0; aL < i{}.x; aL++)", uint32_t(cfInstr.loopStart.loopId));
                     indent();
                     out += "{\n";
                     ++indentation;
@@ -1711,6 +1748,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                     }
                     else
                     {
+                    #ifdef UNLEASHED_RECOMP
                         if (textureFetch.constIndex == 10) // g_GISampler
                         {
                             specConstantsMask |= SPEC_CONSTANT_BICUBIC_GI_FILTER;
@@ -1739,6 +1777,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                             out += '}';
                         }
                         else
+                    #endif
                         {
                             recompile(textureFetch, false);
                         }
@@ -1757,7 +1796,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             {
                 if (isPixelShader)
                 {
-                    specConstantsMask |= (SPEC_CONSTANT_ALPHA_TEST | SPEC_CONSTANT_ALPHA_TO_COVERAGE);
+                    specConstantsMask |= SPEC_CONSTANT_ALPHA_TEST;
 
                     indent();
                     out += "[branch] if (g_SpecConstants() & SPEC_CONSTANT_ALPHA_TEST)";
@@ -1769,6 +1808,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
                     indent();
                     out += "}";
+
+                #ifdef UNLEASHED_RECOMP
+                    specConstantsMask |= SPEC_CONSTANT_ALPHA_TO_COVERAGE;
+
                     indent();
                     out += "else if (g_SpecConstants() & SPEC_CONSTANT_ALPHA_TO_COVERAGE)";
                     indent();
@@ -1781,15 +1824,22 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
                     indent();
                     out += '}';
+                #endif
                 }
 
                 if (simpleControlFlow)
                 {
                     indent();
+                #ifdef UNLEASHED_RECOMP
                     if (hasMtxProjection)
+                    {
                         out += "continue;\n";
+                    }
                     else
+                #endif
+                    {
                         out += "return;\n";
+                    }
                 }
                 else
                 {
@@ -1817,8 +1867,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
         out += "\t}\n";
     }
 
+#ifdef UNLEASHED_RECOMP
     if (hasMtxProjection)
         out += "\t}\n";
+#endif
 
     out += "}";
 }

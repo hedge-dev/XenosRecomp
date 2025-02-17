@@ -2,10 +2,13 @@
 #define SHADER_COMMON_H_INCLUDED
 
 #define SPEC_CONSTANT_R11G11B10_NORMAL  (1 << 0)
-#define SPEC_CONSTANT_BICUBIC_GI_FILTER (1 << 1)
-#define SPEC_CONSTANT_ALPHA_TEST        (1 << 2)
-#define SPEC_CONSTANT_ALPHA_TO_COVERAGE (1 << 3)
-#define SPEC_CONSTANT_REVERSE_Z         (1 << 4)
+#define SPEC_CONSTANT_ALPHA_TEST        (1 << 1)
+
+#ifdef UNLEASHED_RECOMP
+    #define SPEC_CONSTANT_BICUBIC_GI_FILTER (1 << 2)
+    #define SPEC_CONSTANT_ALPHA_TO_COVERAGE (1 << 3)
+    #define SPEC_CONSTANT_REVERSE_Z         (1 << 4)
+#endif
 
 #if !defined(__cplusplus) || defined(__INTELLISENSE__)
 
