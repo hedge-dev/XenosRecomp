@@ -31,6 +31,14 @@ struct RecompiledShader
 
 int main(int argc, char** argv)
 {
+#ifndef XENOS_RECOMP_INPUT
+    if (argc < 4)
+    {
+        printf("Usage: XenosRecomp [input path] [output path] [shader common header file path]");
+        return 0;
+    }
+#endif
+
     const char* input =
 #ifdef XENOS_RECOMP_INPUT 
         XENOS_RECOMP_INPUT
