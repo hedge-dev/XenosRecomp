@@ -40,7 +40,7 @@ Both vertex and pixel shader stages use three constant buffers:
 * Pixel shader constants: 3584 bytes (224 `float4` registers)
 * Shared constants: Used specifically by Unleashed Recompiled
 
-Vertex and pixel shader constants are copied directly from the guest render device, and shaders expect them in little endian format.
+Vertex and pixel shader constants are copied directly from the guest render device, and shaders expect them in little-endian format.
 
 Constant buffer registers are populated using reflection data embedded in the shader binaries. If this data is missing, the recompiler will not function. However, support can be added by defining a `float4` array that covers the entire register range.
 
@@ -50,21 +50,21 @@ Vertex and pixel shader boolean constants each contain 16 elements. These are pa
 
 All constant buffers are implemented as root constant buffers in D3D12, making them easy to upload to the GPU using a linear allocator. In Vulkan, the GPU virtual addresses of constant buffers are passed as push constants. Constants are accessed via preprocessor macros that load values from the GPU virtual addresses using `vk::RawBufferLoad`. These macros ensure the shader function body remains the same for both DXIL and SPIR-V.
 
-Out of bounds dynamic constant accesses should return 0. However, since root constant buffers in D3D12 and raw buffer loads in Vulkan do not enforce this behavior, the shader developer must handle it. To solve this, each dynamic index access is clamped to the valid range, and out of bounds registers return 0.
+Out-of-bounds dynamic constant accesses should return 0. However, since root constant buffers in D3D12 and raw buffer loads in Vulkan do not enforce this behavior, the shader developer must handle it. To solve this, each dynamic index access is clamped to the valid range, and out-of-bounds registers are forced to become 0.
 
 ### Vertex Fetch
 
-A common approach to vertex fetching is passing vertex data as a shader resource view and building special shaders depending on the vertex declaration. Instead, Unleashed Recompiled converts vertex declarations into native D3D12/Vulkan input declarations, allowing vertex shaders to receive data as inputs. While this has limitations, it removes the need for runtime shader permutation compilation based on vertex declarations.
+A common approach to vertex fetching is passing vertex data as a shader resource view and building special shaders depending on the vertex declaration. Instead, Unleashed Recompiled converts vertex declarations into native D3D12/Vulkan input declarations, allowing vertex shaders to receive data as inputs. While this has its limitations, it removes the need for runtime shader permutation compilation based on vertex declarations.
 
-Unleashed Recompiled endian swaps vertex data before uploading it to the GPU by treating buffers as arrays of 32-bit integers. This causes the element order for 8-bit and 16-bit vertex formats to be swizzled. While no visual errors have been observed for 8-bit formats, 16-bit formats get swizzled to YXWZ. This is corrected using a `g_SwappedTexcoords` variable in the shared constants buffer, where each bit indicates whether the corresponding `TEXCOORD` semantic requires reswizzling. While this assumption holds for Sonic Unleashed, other games may require additional support for other semantics.
+Unleashed Recompiled endian swaps vertex data before uploading it to the GPU by treating buffers as arrays of 32-bit integers. This causes the element order for 8-bit and 16-bit vertex formats to be swizzled. While no visual errors have been observed for 8-bit formats, 16-bit formats get swizzled to YXWZ. This is corrected using a `g_SwappedTexcoords` variable in the shared constants buffer, where each bit indicates whether the corresponding `TEXCOORD` semantic requires re-swizzling. While this assumption holds for Sonic Unleashed, other games may require additional support for other semantics.
 
-Xbox 360 supports the `R11G11B10` vertex format, which is unsupported on desktop hardware. The recompiler implements this by using a specialization constant that manually unpacks this format for `NORMAL`, `TANGENT`, and `BINORMAL` semantics in the vertex shader. Similar to `TEXCOORD` swizzling, this assumes the format is only used for these semantics.
+Xbox 360 supports the `R11G11B10` vertex format, which is unsupported on desktop hardware. The recompiler implements this by using a specialization constant that manually unpacks this format for `NORMAL`, `TANGENT` and `BINORMAL` semantics in the vertex shader. Similar to `TEXCOORD` swizzling, this assumes the format is only used for these semantics.
 
 Certain semantics are forced to be `uint4` instead of `float4` for specific shaders in Sonic Unleashed. This is also something that needs to be handled manually for other games.
 
 Instanced geometry is handled completely manually on the Xbox 360. In Sonic Unleashed, the index buffer is passed as a vertex stream, and shaders use it to arbitrarily fetch vertex data, relying on a `g_IndexCount` constant to determine the index of the current instance. Unleashed Recompiled handles this by expecting instanced data to be in the second vertex stream and the index buffer to be in the `POSITION1` semantic. This behavior is completely game specific and must be manually implemented for other games.
 
-Vulkan vertex locations are currently hardcoded for Unleashed Recompiled, chosen based on Sonic Unleashed's shaders while taking the 16 location limit into account. A generic solution would assign unique locations per vertex shader and dynamically create vertex declarations runtime.
+Vulkan vertex locations are currently hardcoded for Unleashed Recompiled, chosen based on Sonic Unleashed's shaders while taking the 16 location limit into account. A generic solution would assign unique locations per vertex shader and dynamically create vertex declarations at runtime.
 
 Mini vertex fetch instructions and vertex fetch bindings are unimplemented.
 
@@ -87,7 +87,7 @@ The recompiler implements several specialization constants, primarily as enhance
 - A flag indicating that the `NORMAL`, `TANGENT`, and `BINORMAL` semantics use the `R11G11B10` vertex format, enabling manual unpacking in the vertex shader.
 - A flag indicating that the pixel shader performs alpha testing. Since modern desktop hardware lacks a fixed function pipeline for alpha testing, this flag inserts a "less than alpha threshold" check at the end of the pixel shader. Additional comparison types may need to be implemented depending on the target game.
 
-While specialization constants are straightforward to implement in SPIR-V, DXIL lacks native support for them. This is solved by compiling shaders as libraries with a declared but unimplemented function that returns the specialization constant value. At runtime, Unleashed Recompiled generates an implementation of this function, compiles it into a library, and links it with the shader to produce a final specialized shader binary. For more details on this technique, [check out this article](https://therealmjp.github.io/posts/dxil-linking/).
+While specialization constants are straightforward to implement in SPIR-V, DXIL lacks native support for them. This is solved by compiling shaders as libraries with a declared, but unimplemented function that returns the specialization constant value. At runtime, Unleashed Recompiled generates an implementation of this function, compiles it into a library, and links it with the shader to produce a final specialized shader binary. For more details on this technique, [check out this article](https://therealmjp.github.io/posts/dxil-linking/).
 
 ### Other Unimplemented Features
 
@@ -105,7 +105,7 @@ XenosRecomp [input shader file path] [output HLSL file path] [header file path]
 
 ### Shader Cache
 
-Alternatively, the recompiler can process an entire directory by scanning for shader binaries within the specified path. In this mode, valid shaders are converted and recompiled into a DXIL/SPIR-V cache, formatted for use with Unleashed Recompiled. The cache is then exported as a .cpp file for direct embedding into the executable:
+Alternatively, the recompiler can process an entire directory by scanning for shader binaries within the specified path. In this mode, valid shaders are converted and recompiled into a DXIL/SPIR-V cache, formatted for use with Unleashed Recompiled. This cache is then exported as a .cpp file for direct embedding into the executable:
 
 ```
 XenosRecomp [input directory path] [output .cpp file path] [header file path]
@@ -114,6 +114,12 @@ XenosRecomp [input directory path] [output .cpp file path] [header file path]
 At runtime, shaders are mapped to their recompiled versions using a 64-bit XXH3 hash lookup. This scanning method is particularly useful for games that store embedded shaders within executables or uncompressed archive formats.
 
 SPIR-V shaders are compressed using smol-v to improve zstd compression efficiency, while DXIL shaders are compressed as-is.
+
+## Building
+
+The project requires CMake 3.20 and a C++ compiler with C++17 support to build. While compilers other than Clang might work, they have not been tested. Since the repository includes submodules, ensure you clone it recursively.
+
+The project uses [vcpkg](https://github.com/microsoft/vcpkg) to integrate DXC. To set it up, define the `VCPKG_ROOT` environment variable to point to the vcpkg root directory. Alternatively, on Windows, you can install vcpkg via the Visual Studio Installer and open the project using Visual Studio's CMake integration.
 
 ## Special Thanks
 
