@@ -9,3 +9,7 @@ endif()
 if (NOT TARGET libzstd)
     add_subdirectory("${XENOS_RECOMP_THIRDPARTY_ROOT}/zstd/build/cmake")
 endif()
+
+if (NOT TARGET Microsoft::DirectXShaderCompiler)
+    add_subdirectory("${XENOS_RECOMP_THIRDPARTY_ROOT}/dxc-bin")
+endif()

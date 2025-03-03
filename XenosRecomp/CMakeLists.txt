@@ -18,11 +18,8 @@ add_executable(XenosRecomp
     shader_recompiler.h
     "${SMOLV_SOURCE_DIR}/smolv.cpp")
 
-find_package(directx-dxc CONFIG REQUIRED)
-
 target_link_libraries(XenosRecomp PRIVATE
     Microsoft::DirectXShaderCompiler
-    Microsoft::DXIL
     xxHash::xxhash
     libzstd_static
     fmt::fmt)
@@ -31,16 +28,26 @@ target_include_directories(XenosRecomp PRIVATE ${SMOLV_SOURCE_DIR})
 
 target_precompile_headers(XenosRecomp PRIVATE pch.h)
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     target_compile_options(XenosRecomp PRIVATE -Wno-switch -Wno-unused-variable -Wno-null-arithmetic -fms-extensions)
+
+    include(CheckCXXSymbolExists)
+    check_cxx_symbol_exists(_LIBCPP_VERSION version LIBCPP)
+    if(LIBCPP)
+        # Allows using std::execution
+        target_compile_options(XenosRecomp PRIVATE -fexperimental-library)
+    endif()
 endif()
 
 if (WIN32)
     target_compile_definitions(XenosRecomp PRIVATE _CRT_SECURE_NO_WARNINGS)
-    find_file(DIRECTX_DXIL_LIBRARY "dxil.dll")
-    file(COPY ${DIRECTX_DXIL_LIBRARY} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+    add_custom_command(TARGET XenosRecomp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:XenosRecomp> $<TARGET_FILE_DIR:XenosRecomp>
+        COMMAND_EXPAND_LISTS
+    )
 endif()
 
 if (XENOS_RECOMP_DXIL)
     target_compile_definitions(XenosRecomp PRIVATE XENOS_RECOMP_DXIL)
+    target_link_libraries(XenosRecomp PRIVATE Microsoft::DXIL)
 endif()
