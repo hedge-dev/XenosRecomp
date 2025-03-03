@@ -10,3 +10,6 @@
 [submodule "thirdparty/fmt"]
 	path = thirdparty/fmt
 	url = https://github.com/fmtlib/fmt.git
+[submodule "thirdparty/dxc-bin"]
+	path = thirdparty/dxc-bin
+	url = https://github.com/renderbag/dxc-bin.git
