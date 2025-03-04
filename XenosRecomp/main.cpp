@@ -74,6 +74,11 @@ int main(int argc, char** argv)
 
         for (auto& file : std::filesystem::directory_iterator(input))
         {
+            if (std::filesystem::is_directory(file))
+            {
+                continue;
+            }
+            
             size_t fileSize = 0;
             auto fileData = readAllBytes(file.path().string().c_str(), fileSize);
             bool foundAny = false;
