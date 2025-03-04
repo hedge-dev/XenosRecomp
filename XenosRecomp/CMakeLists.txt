@@ -6,6 +6,26 @@ endif()
 
 set(SMOLV_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/smol-v/source")
 
+set(DXC_BIN_PATH "${XENOS_RECOMP_THIRDPARTY_ROOT}/dxc-bin")
+set(DXCOMPILER_INC "${DXC_BIN_PATH}/inc")
+if (CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "x86_64")
+    if (WIN32)
+        set(DXCOMPILER_LIB "${XENOS_RECOMP_THIRDPARTY_ROOT}/dxc-bin/lib/x64/dxcompiler.lib")
+    elseif (APPLE)
+        set(DXCOMPILER_LIB "${XENOS_RECOMP_THIRDPARTY_ROOT}/dxc-bin/lib/x64/libdxcompiler.dylib")
+    else()
+        set(DXCOMPILER_LIB "${XENOS_RECOMP_THIRDPARTY_ROOT}/dxc-bin/lib/x64/libdxcompiler.so")
+    endif()
+else()
+    if (WIN32)
+        set(DXCOMPILER_LIB "${XENOS_RECOMP_THIRDPARTY_ROOT}/dxc-bin/lib/arm64/dxcompiler.lib")
+    elseif (APPLE)
+        set(DXCOMPILER_LIB "${XENOS_RECOMP_THIRDPARTY_ROOT}/dxc-bin/lib/arm64/libdxcompiler.dylib")
+    else()
+        set(DXCOMPILER_LIB "${XENOS_RECOMP_THIRDPARTY_ROOT}/dxc-bin/lib/arm64/libdxcompiler.so")
+    endif()
+endif()
+
 add_executable(XenosRecomp 
     constant_table.h
     dxc_compiler.cpp
@@ -18,21 +38,25 @@ add_executable(XenosRecomp
     shader_recompiler.h
     "${SMOLV_SOURCE_DIR}/smolv.cpp")
 
-find_package(directx-dxc CONFIG REQUIRED)
-
 target_link_libraries(XenosRecomp PRIVATE
-    Microsoft::DirectXShaderCompiler
-    Microsoft::DXIL
+    ${DXCOMPILER_LIB}
     xxHash::xxhash
     libzstd_static
     fmt::fmt)
 
-target_include_directories(XenosRecomp PRIVATE ${SMOLV_SOURCE_DIR})
+target_include_directories(XenosRecomp PRIVATE ${SMOLV_SOURCE_DIR} ${DXCOMPILER_INC})
 
 target_precompile_headers(XenosRecomp PRIVATE pch.h)
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     target_compile_options(XenosRecomp PRIVATE -Wno-switch -Wno-unused-variable -Wno-null-arithmetic -fms-extensions)
+
+    include(CheckCXXSymbolExists)
+    check_cxx_symbol_exists(_LIBCPP_VERSION version LIBCPP)
+    if(LIBCPP)
+        # Allows using std::execution
+        target_compile_options(XenosRecomp PRIVATE -fexperimental-library)
+    endif()
 endif()
 
 if (WIN32)
