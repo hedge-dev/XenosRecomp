@@ -72,7 +72,7 @@ int main(int argc, char** argv)
         std::vector<std::unique_ptr<uint8_t[]>> files;
         std::map<XXH64_hash_t, RecompiledShader> shaders;
 
-        for (auto& file : std::filesystem::directory_iterator(input))
+        for (auto& file : std::filesystem::recursive_directory_iterator(input))
         {
             if (std::filesystem::is_directory(file))
             {
