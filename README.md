@@ -119,8 +119,6 @@ SPIR-V shaders are compressed using smol-v to improve zstd compression efficienc
 
 The project requires CMake 3.20 and a C++ compiler with C++17 support to build. While compilers other than Clang might work, they have not been tested. Since the repository includes submodules, ensure you clone it recursively.
 
-The project uses [vcpkg](https://github.com/microsoft/vcpkg) to integrate DXC. To set it up, define the `VCPKG_ROOT` environment variable to point to the vcpkg root directory. Alternatively, on Windows, you can install vcpkg via the Visual Studio Installer and open the project using Visual Studio's CMake integration.
-
 ## Special Thanks
 
 This recompiler would not have been possible without the [Xenia](https://github.com/xenia-project/xenia) emulator. Nearly every aspect of the development was guided by referencing Xenia's shader translator and research.
