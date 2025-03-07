@@ -1646,7 +1646,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                 {
                     indent();
                 #ifdef UNLEASHED_RECOMP
-                    print("[unroll] ")
+                    print("[unroll] ");
                 #endif
                     println("for (aL = 0; aL < i{}.x; aL++)", uint32_t(cfInstr.loopStart.loopId));
                     indent();
