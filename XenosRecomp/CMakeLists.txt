@@ -4,6 +4,10 @@ if (WIN32)
     option(XENOS_RECOMP_DXIL "Generate DXIL shader cache" ON)
 endif()
 
+if (APPLE)
+    option(XENOS_RECOMP_AIR "Generate Metal AIR shader cache" ON)
+endif()
+
 set(SMOLV_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/smol-v/source")
 
 add_executable(XenosRecomp 
@@ -50,4 +54,8 @@ endif()
 if (XENOS_RECOMP_DXIL)
     target_compile_definitions(XenosRecomp PRIVATE XENOS_RECOMP_DXIL)
     target_link_libraries(XenosRecomp PRIVATE Microsoft::DXIL)
+endif()
+
+if (XENOS_RECOMP_AIR)
+    target_compile_definitions(XenosRecomp PRIVATE XENOS_RECOMP_AIR)
 endif()
