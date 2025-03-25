@@ -10,8 +10,10 @@ endif()
 
 set(SMOLV_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/smol-v/source")
 
-add_executable(XenosRecomp 
+add_executable(XenosRecomp
     constant_table.h
+    air_compiler.cpp
+    air_compiler.h
     dxc_compiler.cpp
     dxc_compiler.h
     main.cpp

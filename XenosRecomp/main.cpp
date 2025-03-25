@@ -1,6 +1,7 @@
 #include "shader.h"
 #include "shader_recompiler.h"
 #include "dxc_compiler.h"
+#include "air_compiler.h"
 
 static std::unique_ptr<uint8_t[]> readAllBytes(const char* filePath, size_t& fileSize)
 {
@@ -26,6 +27,7 @@ struct RecompiledShader
     uint8_t* data = nullptr;
     IDxcBlob* dxil = nullptr;
     std::vector<uint8_t> spirv;
+    std::vector<uint8_t> air;
     uint32_t specConstantsMask = 0;
 };
 
@@ -133,6 +135,10 @@ int main(int argc, char** argv)
                 assert(*(reinterpret_cast<uint32_t *>(shader.dxil->GetBufferPointer()) + 1) != 0 && "DXIL was not signed properly!");
 #endif
 
+#ifdef XENOS_RECOMP_AIR
+                shader.air = AirCompiler::compile(recompiler.out);
+#endif
+
                 IDxcBlob* spirv = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, false, true);
                 assert(spirv != nullptr);
 
@@ -154,18 +160,24 @@ int main(int argc, char** argv)
 
         std::vector<uint8_t> dxil;
         std::vector<uint8_t> spirv;
+        std::vector<uint8_t> air;
 
         for (auto& [hash, shader] : shaders)
         {
-            f.println("\t{{ 0x{:X}, {}, {}, {}, {}, {} }},",
-                hash, dxil.size(), (shader.dxil != nullptr) ? shader.dxil->GetBufferSize() : 0, spirv.size(), shader.spirv.size(), shader.specConstantsMask);
+            f.println("\t{{ 0x{:X}, {}, {}, {}, {}, {}, {}, {} }},",
+                hash, dxil.size(), (shader.dxil != nullptr) ? shader.dxil->GetBufferSize() : 0,
+                spirv.size(), shader.spirv.size(), air.size(), shader.air.size(), shader.specConstantsMask);
 
             if (shader.dxil != nullptr)
             {
                 dxil.insert(dxil.end(), reinterpret_cast<uint8_t *>(shader.dxil->GetBufferPointer()),
                     reinterpret_cast<uint8_t *>(shader.dxil->GetBufferPointer()) + shader.dxil->GetBufferSize());
             }
-            
+
+#ifdef XENOS_RECOMP_AIR
+            air.insert(air.end(), shader.air.begin(), shader.air.end());
+#endif
+
             spirv.insert(spirv.end(), shader.spirv.begin(), shader.spirv.end());
         }
 
@@ -187,6 +199,22 @@ int main(int argc, char** argv)
         f.println("}};");
         f.println("const size_t g_dxilCacheCompressedSize = {};", dxilCompressed.size());
         f.println("const size_t g_dxilCacheDecompressedSize = {};", dxil.size());
+#endif
+
+#ifdef XENOS_RECOMP_AIR
+        fmt::println("Compressing AIR cache...");
+
+        std::vector<uint8_t> airCompressed(ZSTD_compressBound(air.size()));
+        airCompressed.resize(ZSTD_compress(airCompressed.data(), airCompressed.size(), air.data(), air.size(), level));
+
+        f.print("const uint8_t g_compressedAirCache[] = {{");
+
+        for (auto data : airCompressed)
+            f.print("{},", data);
+
+        f.println("}};");
+        f.println("const size_t g_airCacheCompressedSize = {};", airCompressed.size());
+        f.println("const size_t g_airCacheDecompressedSize = {};", air.size());
 #endif
 
         fmt::println("Compressing SPIRV cache...");
