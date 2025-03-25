@@ -1617,8 +1617,6 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
     out += ")\n";
     out += "{\n";
 
-#ifdef UNLEASHED_RECOMP
-
     std::string outputName = isPixelShader ? "PixelShaderOutput" : "Interpolators";
 
     out += "#ifdef __air__\n";
@@ -1627,6 +1625,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
     println("\t{0} output = ({0})0;", outputName);
     out += "#endif\n";
 
+#ifdef UNLEASHED_RECOMP
     if (hasMtxProjection)
     {
         specConstantsMask |= SPEC_CONSTANT_REVERSE_Z;
