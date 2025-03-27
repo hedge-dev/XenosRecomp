@@ -1085,19 +1085,19 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
 
         case AluScalarOpcode::Logc:
         case AluScalarOpcode::Log:
-            print("clamp(log2({}), FLT_MIN, FLT_MAX)", op(SCALAR_0).expression);
+            print("clamp(log2({}), -FLT_MAX, FLT_MAX)", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Rcpc:
         case AluScalarOpcode::Rcpf:
         case AluScalarOpcode::Rcp:
-            print("clamp(rcp({}), FLT_MIN, FLT_MAX)", op(SCALAR_0).expression);
+            print("clamp(rcp({}), -FLT_MAX, FLT_MAX)", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Rsqc:
         case AluScalarOpcode::Rsqf:
         case AluScalarOpcode::Rsq:
-            print("clamp(rsqrt({}), FLT_MIN, FLT_MAX)", op(SCALAR_0).expression);
+            print("clamp(rsqrt({}), -FLT_MAX, FLT_MAX)", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Subs:

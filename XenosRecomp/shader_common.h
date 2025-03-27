@@ -13,7 +13,6 @@
 #if defined(__air__) || !defined(__cplusplus) || defined(__INTELLISENSE__)
 
 #ifndef __air__
-#define FLT_MIN asfloat(0xff7fffff)
 #define FLT_MAX asfloat(0x7f7fffff)
 #endif
 
