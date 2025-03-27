@@ -1508,7 +1508,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
         out += "#if __air__\n";
 
         for (auto& [usage, usageIndex] : INTERPOLATORS)
-            println("\tfloat4 i{}{};", USAGE_VARIABLES[uint32_t(usage)], usageIndex);
+            println("\tfloat4 i{0}{1} [[user({2}{1})]];", USAGE_VARIABLES[uint32_t(usage)], usageIndex, USAGE_SEMANTICS[uint32_t(usage)]);
 
         out += "#else\n";
 
@@ -1643,7 +1643,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
         out += "\tfloat4 oPos [[position]];\n";
 
         for (auto& [usage, usageIndex] : INTERPOLATORS)
-            print("\tfloat4 o{0}{1};\n", USAGE_VARIABLES[uint32_t(usage)], usageIndex);
+            print("\tfloat4 o{0}{1} [[user({2}{1})]];\n", USAGE_VARIABLES[uint32_t(usage)], usageIndex, USAGE_SEMANTICS[uint32_t(usage)]);
 
         out += "#else\n";
 
