@@ -180,7 +180,7 @@ float rcp(T a)
 template<typename T>
 float4x4 mul(T a, T b)
 {
-    return a * b;
+    return b * a;
 }
 #endif
 
