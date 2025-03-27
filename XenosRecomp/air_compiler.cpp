@@ -18,7 +18,7 @@ std::vector<uint8_t> AirCompiler::compile(const std::string& shaderSource) {
     close(tmpFD);
 
     pid_t pid;
-    char* airArgv[] = { "xcrun", "-sdk", "macosx", "metal", "-o", irFile.data(), "-c", inputFile.data(), "-D__air__", "-DUNLEASHED_RECOMP", "-Wno-unused-variable", nullptr };
+    char* airArgv[] = { "xcrun", "-sdk", "macosx", "metal", "-o", irFile.data(), "-c", inputFile.data(), "-D__air__", "-DUNLEASHED_RECOMP", "-Wno-unused-variable", "-frecord-sources", "-gline-tables-only", nullptr };
 
     if (posix_spawn(&pid, "/usr/bin/xcrun", nullptr, nullptr, airArgv, nullptr) != 0) {
         unlink(inputFile.data());
