@@ -42,17 +42,12 @@ struct PushConstants
 
 using namespace metal;
 
-#ifdef SPEC_CONSTANTS
-constant uint G_SPEC_CONSTANT [[function_constant(0)]];
-#endif
+constant uint G_SPEC_CONSTANTS [[function_constant(0)]];
+constant uint G_SPEC_CONSTANTS_VAL = is_function_constant_defined(G_SPEC_CONSTANTS) ? G_SPEC_CONSTANTS : 0;
 
 uint g_SpecConstants()
 {
-#ifdef SPEC_CONSTANTS
-    return G_SPEC_CONSTANT;
-#else
-    return 0;
-#endif
+    return G_SPEC_CONSTANTS_VAL;
 }
 
 struct PushConstants
