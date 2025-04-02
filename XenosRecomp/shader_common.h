@@ -59,7 +59,8 @@ struct PushConstants
 
 #define g_Booleans (*(reinterpret_cast<device uint*>(g_PushConstants.SharedConstants + 256)))
 #define g_SwappedTexcoords (*(reinterpret_cast<device uint*>(g_PushConstants.SharedConstants + 260)))
-#define g_AlphaThreshold (*(reinterpret_cast<device float*>(g_PushConstants.SharedConstants + 264)))
+#define g_HalfPixelOffset (*(reinterpret_cast<device float*>(g_PushConstants.SharedConstants + 264)))
+#define g_AlphaThreshold (*(reinterpret_cast<device float*>(g_PushConstants.SharedConstants + 272)))
 
 #else
 
