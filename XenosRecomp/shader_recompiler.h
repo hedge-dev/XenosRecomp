@@ -45,7 +45,7 @@ struct ShaderRecompiler : StringBuffer
             out += '\t';
     }
 
-    void printDstSwizzle(uint32_t dstSwizzle, bool operand);
+    uint32_t printDstSwizzle(uint32_t dstSwizzle, bool operand);
     void printDstSwizzle01(uint32_t dstRegister, uint32_t dstSwizzle);
 
     void recompile(const VertexFetchInstruction& instr, uint32_t address);
