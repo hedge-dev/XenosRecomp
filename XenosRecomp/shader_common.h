@@ -78,22 +78,22 @@ uint g_SpecConstants();
 
 struct Texture2DDescriptorHeap
 {
-    array<texture2d<float>, 1> g [[id(0)]];
+    texture2d<float> tex;
 };
 
 struct Texture3DDescriptorHeap
 {
-    array<texture3d<float>, 1> g [[id(0)]];
+    texture3d<float> tex;
 };
 
 struct TextureCubeDescriptorHeap
 {
-    array<texturecube<float>, 1> g [[id(0)]];
+    texturecube<float> tex;
 };
 
 struct SamplerDescriptorHeap
 {
-    array<sampler, 1> g [[id(0)]];
+    sampler samp;
 };
 
 uint2 getTexture2DDimensions(texture2d<float> texture)
@@ -101,24 +101,24 @@ uint2 getTexture2DDimensions(texture2d<float> texture)
     return uint2(texture.get_width(), texture.get_height());
 }
 
-float4 tfetch2D(constant Texture2DDescriptorHeap& textureHeap,
-                constant SamplerDescriptorHeap& samplerHeap,
+float4 tfetch2D(constant Texture2DDescriptorHeap* textureHeap,
+                constant SamplerDescriptorHeap* samplerHeap,
                 uint resourceDescriptorIndex,
                 uint samplerDescriptorIndex,
                 float2 texCoord, float2 offset)
 {
-    texture2d<float> texture = textureHeap.g[resourceDescriptorIndex];
-    sampler sampler = samplerHeap.g[samplerDescriptorIndex];
+    texture2d<float> texture = textureHeap[resourceDescriptorIndex].tex;
+    sampler sampler = samplerHeap[samplerDescriptorIndex].samp;
     return texture.sample(sampler, texCoord + offset / (float2)getTexture2DDimensions(texture));
 }
 
-float2 getWeights2D(constant Texture2DDescriptorHeap& textureHeap,
-                    constant SamplerDescriptorHeap& samplerHeap,
+float2 getWeights2D(constant Texture2DDescriptorHeap* textureHeap,
+                    constant SamplerDescriptorHeap* samplerHeap,
                     uint resourceDescriptorIndex,
                     uint samplerDescriptorIndex,
                     float2 texCoord, float2 offset)
 {
-    texture2d<float> texture = textureHeap.g[resourceDescriptorIndex];
+    texture2d<float> texture = textureHeap[resourceDescriptorIndex].tex;
     return select(fract(texCoord * (float2)getTexture2DDimensions(texture) + offset - 0.5), 0.0, isnan(texCoord));
 }
 
@@ -236,14 +236,14 @@ struct CubeMapData
 
 #ifdef __air__
 
-float4 tfetch2DBicubic(constant Texture2DDescriptorHeap& textureHeap,
-                       constant SamplerDescriptorHeap& samplerHeap,
+float4 tfetch2DBicubic(constant Texture2DDescriptorHeap* textureHeap,
+                       constant SamplerDescriptorHeap* samplerHeap,
                        uint resourceDescriptorIndex,
                        uint samplerDescriptorIndex,
                        float2 texCoord, float2 offset)
 {
-    texture2d<float> texture = textureHeap.g[resourceDescriptorIndex];
-    sampler sampler = samplerHeap.g[samplerDescriptorIndex];
+    texture2d<float> texture = textureHeap[resourceDescriptorIndex].tex;
+    sampler sampler = samplerHeap[samplerDescriptorIndex].samp;
     uint2 dimensions = getTexture2DDimensions(texture);
 
     float x = texCoord.x * dimensions.x + offset.x;
@@ -272,25 +272,25 @@ float4 tfetch2DBicubic(constant Texture2DDescriptorHeap& textureHeap,
     return r;
 }
 
-float4 tfetch3D(constant Texture3DDescriptorHeap& textureHeap,
-                constant SamplerDescriptorHeap& samplerHeap,
+float4 tfetch3D(constant Texture3DDescriptorHeap* textureHeap,
+                constant SamplerDescriptorHeap* samplerHeap,
                 uint resourceDescriptorIndex,
                 uint samplerDescriptorIndex,
                 float3 texCoord)
 {
-    texture3d<float> texture = textureHeap.g[resourceDescriptorIndex];
-    sampler sampler = samplerHeap.g[samplerDescriptorIndex];
+    texture3d<float> texture = textureHeap[resourceDescriptorIndex].tex;
+    sampler sampler = samplerHeap[samplerDescriptorIndex].samp;
     return texture.sample(sampler, texCoord);
 }
 
-float4 tfetchCube(constant TextureCubeDescriptorHeap& textureHeap,
-                  constant SamplerDescriptorHeap& samplerHeap,
+float4 tfetchCube(constant TextureCubeDescriptorHeap* textureHeap,
+                  constant SamplerDescriptorHeap* samplerHeap,
                   uint resourceDescriptorIndex,
                   uint samplerDescriptorIndex,
                   float3 texCoord, thread CubeMapData* cubeMapData)
 {
-    texturecube<float> texture = textureHeap.g[resourceDescriptorIndex];
-    sampler sampler = samplerHeap.g[samplerDescriptorIndex];
+    texturecube<float> texture = textureHeap[resourceDescriptorIndex].tex;
+    sampler sampler = samplerHeap[samplerDescriptorIndex].samp;
     return texture.sample(sampler, cubeMapData->cubeMapDirections[(uint)texCoord.z]);
 }
 
@@ -406,11 +406,11 @@ float4 max4(float4 src0)
 
 #ifdef __air__
 
-float2 getPixelCoord(constant Texture2DDescriptorHeap& textureHeap,
+float2 getPixelCoord(constant Texture2DDescriptorHeap* textureHeap,
                      uint resourceDescriptorIndex,
                      float2 texCoord)
 {
-    texture2d<float> texture = textureHeap.g[resourceDescriptorIndex];
+    texture2d<float> texture = textureHeap[resourceDescriptorIndex].tex;
     return (float2)getTexture2DDimensions(texture) * texCoord;
 }
 

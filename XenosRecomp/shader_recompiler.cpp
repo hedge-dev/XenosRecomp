@@ -1683,10 +1683,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
         out += "\tfloat4 iPos [[position]],\n";
         out += "\tbool iFace [[front_facing]],\n";
 
-        out += "\tconstant Texture2DDescriptorHeap& g_Texture2DDescriptorHeap [[buffer(0)]],\n";
-        out += "\tconstant Texture3DDescriptorHeap& g_Texture3DDescriptorHeap [[buffer(1)]],\n";
-        out += "\tconstant TextureCubeDescriptorHeap& g_TextureCubeDescriptorHeap [[buffer(2)]],\n";
-        out += "\tconstant SamplerDescriptorHeap& g_SamplerDescriptorHeap [[buffer(3)]],\n";
+        out += "\tconstant Texture2DDescriptorHeap* g_Texture2DDescriptorHeap [[buffer(0)]],\n";
+        out += "\tconstant Texture3DDescriptorHeap* g_Texture3DDescriptorHeap [[buffer(1)]],\n";
+        out += "\tconstant TextureCubeDescriptorHeap* g_TextureCubeDescriptorHeap [[buffer(2)]],\n";
+        out += "\tconstant SamplerDescriptorHeap* g_SamplerDescriptorHeap [[buffer(3)]],\n";
         out += "\tconstant PushConstants& g_PushConstants [[buffer(4)]]\n";
 
         out += "#else\n";
