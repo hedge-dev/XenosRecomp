@@ -1828,7 +1828,12 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                 }
                 else
                 {
-                    out += "\toPos.xy += g_HalfPixelOffset * oPos.w;\n";
+                #ifdef UNLEASHED_RECOMP
+                    if (!hasMtxProjection)
+                #endif
+                    {
+                        out += "\toPos.xy += g_HalfPixelOffset * oPos.w;\n";
+                    }
                 }
 
                 if (simpleControlFlow)
@@ -1874,6 +1879,9 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 #ifdef UNLEASHED_RECOMP
     if (hasMtxProjection)
         out += "\t}\n";
+
+    if (!isPixelShader && hasMtxProjection)
+        out += "\toPos.xy += g_HalfPixelOffset * oPos.w;\n";
 #endif
 
     out += "}";
