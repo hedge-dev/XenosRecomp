@@ -121,7 +121,7 @@ static constexpr std::pair<DeclUsage, size_t> INTERPOLATORS[] =
 static constexpr std::string_view TEXTURE_DIMENSIONS[] = 
 {
     "2D",
-    "3D", 
+    "3D",
     "Cube" 
 };
 
@@ -130,14 +130,21 @@ static FetchDestinationSwizzle getDestSwizzle(uint32_t dstSwizzle, uint32_t inde
     return FetchDestinationSwizzle((dstSwizzle >> (index * 3)) & 0x7);
 }
 
-void ShaderRecompiler::printDstSwizzle(uint32_t dstSwizzle, bool operand)
+uint32_t ShaderRecompiler::printDstSwizzle(uint32_t dstSwizzle, bool operand)
 {
+    uint32_t size = 0;
+
     for (size_t i = 0; i < 4; i++)
     {
         const auto swizzle = getDestSwizzle(dstSwizzle, i);
         if (swizzle >= FetchDestinationSwizzle::X && swizzle <= FetchDestinationSwizzle::W)
+        {
             out += SWIZZLES[operand ? uint32_t(swizzle) : i];
+            size++;
+        }
     }
+
+    return size;
 }
 
 void ShaderRecompiler::printDstSwizzle01(uint32_t dstRegister, uint32_t dstSwizzle)
@@ -172,9 +179,14 @@ void ShaderRecompiler::recompile(const VertexFetchInstruction& instr, uint32_t a
 
     indent();
     print("r{}.", instr.dstRegister);
-    printDstSwizzle(instr.dstSwizzle, false);
+    uint32_t size = printDstSwizzle(instr.dstSwizzle, false);
 
     out += " = ";
+
+    if (size <= 1)
+        out += "(float)(";
+    else
+        print("(float{})(", size);
 
     auto findResult = vertexElements.find(address);
     assert(findResult != vertexElements.end());
@@ -189,11 +201,11 @@ void ShaderRecompiler::recompile(const VertexFetchInstruction& instr, uint32_t a
         break;
 
     case DeclUsage::TexCoord:
-        print("tfetchTexcoord(g_SwappedTexcoords, ");
+        print("swapFloats(g_SwappedTexcoords, (float4)");
         break;
     }
 
-    print("i{}{}", USAGE_VARIABLES[uint32_t(findResult->second.usage)], uint32_t(findResult->second.usageIndex));
+    print("(input.i{}{})", USAGE_VARIABLES[uint32_t(findResult->second.usage)], uint32_t(findResult->second.usageIndex));
 
     switch (findResult->second.usage)
     {
@@ -208,7 +220,7 @@ void ShaderRecompiler::recompile(const VertexFetchInstruction& instr, uint32_t a
         break;
     }
 
-    out += '.';
+    out += ").";
     printDstSwizzle(instr.dstSwizzle, true);
 
     out += ";\n";
@@ -271,7 +283,13 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
     if (instr.constIndex == 0 && instr.dimension == TextureDimension::Texture2D)
     {
         indent();
-        print("pixelCoord = getPixelCoord({}_Texture2DDescriptorIndex, ", constNamePtr);
+        println("pixelCoord = getPixelCoord(");
+        println("#ifdef __air__");
+        indent();
+        println("g_Texture2DDescriptorHeap,");
+        println("#endif");
+        indent();
+        print("{}_Texture2DDescriptorIndex, ", constNamePtr);
         printSrcRegister(2);
         out += ");\n";
     }
@@ -331,7 +349,17 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
         out += "Bicubic";
 #endif
 
-    print("({0}_Texture{1}DescriptorIndex, {0}_SamplerDescriptorIndex, ", constNamePtr, dimension);
+    println("(");
+
+    println("#ifdef __air__");
+    indent();
+    println("\tg_Texture{}DescriptorHeap,", dimension);
+    indent();
+    println("\tg_SamplerDescriptorHeap,");
+    println("#endif");
+
+    indent();
+    print("\t{0}_Texture{1}DescriptorIndex, {0}_SamplerDescriptorIndex, ", constNamePtr, dimension);
     printSrcRegister(componentCount);
 
     switch (instr.dimension)
@@ -340,7 +368,13 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
         print(", float2({}, {})", instr.offsetX * 0.5f, instr.offsetY * 0.5f);
         break;
     case TextureDimension::TextureCube:
-        out += ", cubeMapData";
+        println("\n#ifdef __air__");
+        indent();
+        println(", &cubeMapData");
+        println("#else");
+        indent();
+        println(", cubeMapData");
+        println("#endif");
         break;
     }
 
@@ -381,6 +415,12 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
         SCALAR_1,
         SCALAR_CONSTANT_0,
         SCALAR_CONSTANT_1
+    };
+
+    struct OperationResult
+    {
+        std::string expression;
+        size_t componentCount;
     };
 
     auto op = [&](size_t operand)
@@ -487,16 +527,16 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
                 }
             }
 
-            std::string result;
+            OperationResult opResult {};
 
             if (negate)
-                result += '-';
+                opResult.expression += '-';
 
             if (abs)
-                result += "abs(";
+                opResult.expression += "abs(";
 
-            result += regFormatted;
-            result += '.';
+            opResult.expression += regFormatted;
+            opResult.expression += '.';
 
             switch (operand)
             {
@@ -528,8 +568,10 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
 
                 for (size_t i = 0; i < 4; i++)
                 {
-                    if ((mask >> i) & 0x1)
-                        result += SWIZZLES[((swizzle >> (i * 2)) + i) & 0x3];
+                    if ((mask >> i) & 0x1) {
+                        opResult.componentCount++;
+                        opResult.expression += SWIZZLES[((swizzle >> (i * 2)) + i) & 0x3];
+                    }
                 }
 
                 break;
@@ -537,47 +579,51 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
 
             case SCALAR_0:
             case SCALAR_CONSTANT_0:
-                result += SWIZZLES[((swizzle >> 6) + 3) & 0x3];
+                opResult.componentCount = 1;
+                opResult.expression += SWIZZLES[((swizzle >> 6) + 3) & 0x3];
                 break;
 
             case SCALAR_1:
             case SCALAR_CONSTANT_1:
-                result += SWIZZLES[swizzle & 0x3];
+                opResult.componentCount = 1;
+                opResult.expression += SWIZZLES[swizzle & 0x3];
                 break;
             }
 
             if (abs)
-                result += ")";
+                opResult.expression += ")";
 
-            return result;
+            return opResult;
         };
 
     switch (instr.vectorOpcode)
     {
     case AluVectorOpcode::KillEq:
         indent();
-        println("clip(any({} == {}) ? -1 : 1);", op(VECTOR_0), op(VECTOR_1));
+        println("clip(any({} == {}) ? -1 : 1);", op(VECTOR_0).expression, op(VECTOR_1).expression);
         break;
     
     case AluVectorOpcode::KillGt:
         indent();
-        println("clip(any({} > {}) ? -1 : 1);", op(VECTOR_0), op(VECTOR_1));
+        println("clip(any({} > {}) ? -1 : 1);", op(VECTOR_0).expression, op(VECTOR_1).expression);
         break;
     
     case AluVectorOpcode::KillGe:
         indent();
-        println("clip(any({} >= {}) ? -1 : 1);", op(VECTOR_0), op(VECTOR_1));
+        println("clip(any({} >= {}) ? -1 : 1);", op(VECTOR_0).expression, op(VECTOR_1).expression);
         break;
     
     case AluVectorOpcode::KillNe:
         indent();
-        println("clip(any({} != {}) ? -1 : 1);", op(VECTOR_0), op(VECTOR_1));
+        println("clip(any({} != {}) ? -1 : 1);", op(VECTOR_0).expression, op(VECTOR_1).expression);
         break;
     }
 
     bool closeIfBracket = false;
 
     std::string_view exportRegister;
+    bool vectorRegister = true;
+
     if (instr.exportData)
     {
         if (isPixelShader)
@@ -585,19 +631,20 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
             switch (ExportRegister(instr.vectorDest))
             {
             case ExportRegister::PSColor0:
-                exportRegister = "oC0";
+                exportRegister = "output.oC0";
                 break;        
             case ExportRegister::PSColor1:
-                exportRegister = "oC1";
+                exportRegister = "output.oC1";
                 break;        
             case ExportRegister::PSColor2:
-                exportRegister = "oC2";
+                exportRegister = "output.oC2";
                 break;            
             case ExportRegister::PSColor3:
-                exportRegister = "oC3";
+                exportRegister = "output.oC3";
                 break;           
             case ExportRegister::PSDepth:
-                exportRegister = "oDepth";
+                exportRegister = "output.oDepth";
+                vectorRegister = false;
                 break;
             }
         }
@@ -606,7 +653,7 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
             switch (ExportRegister(instr.vectorDest))
             {
             case ExportRegister::VSPosition:
-                exportRegister = "oPos";
+                exportRegister = "output.oPos";
 
             #ifdef UNLEASHED_RECOMP
                 if (hasMtxProjection)
@@ -637,7 +684,7 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
     if (instr.vectorOpcode >= AluVectorOpcode::SetpEqPush && instr.vectorOpcode <= AluVectorOpcode::SetpGePush)
     {
         indent();
-        print("p0 = {} == 0.0 && {} ", op(VECTOR_0), op(VECTOR_1));
+        print("p0 = {} == 0.0 && {} ", op(VECTOR_0).expression, op(VECTOR_1).expression);
 
         switch (instr.vectorOpcode)
         {
@@ -660,7 +707,7 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
     else if (instr.vectorOpcode >= AluVectorOpcode::MaxA)
     {
         indent();
-        println("a0 = (int)clamp(floor(({}).w + 0.5), -256.0, 255.0);", op(VECTOR_0));
+        println("a0 = (int)clamp(floor(({}).w + 0.5), -256.0, 255.0);", op(VECTOR_0).expression);
     }
 
     uint32_t vectorWriteMask = instr.vectorWriteMask;
@@ -673,131 +720,274 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
         if (!exportRegister.empty())
         {
             out += exportRegister;
-            out += '.';
+            if (vectorRegister)
+                out += '.';
         }
         else
         {
             print("r{}.", instr.vectorDest);
         }
 
+        uint32_t vectorWriteSize = 0;
+
         for (size_t i = 0; i < 4; i++)
         {
             if ((vectorWriteMask >> i) & 0x1)
-                out += SWIZZLES[i];
+            {
+                if (vectorRegister)
+                    out += SWIZZLES[i];
+                vectorWriteSize++;
+            }
         }
 
         out += " = ";
 
+        if (vectorWriteSize > 1)
+            print("(float{})((", vectorWriteSize);
+        else
+            out += "(float)((";
+
         if (instr.vectorSaturate)
             out += "saturate(";
+
+        size_t operationResultComponentCount;
 
         switch (instr.vectorOpcode)
         {
         case AluVectorOpcode::Add:
-            print("{} + {}", op(VECTOR_0), op(VECTOR_1));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                operationResultComponentCount = std::max(v0.componentCount, v1.componentCount);
+
+                print("{} + {}", v0.expression, v1.expression);
+                break;
+            }
 
         case AluVectorOpcode::Mul:
-            print("{} * {}", op(VECTOR_0), op(VECTOR_1));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                operationResultComponentCount = std::max(v0.componentCount, v1.componentCount);
+
+                print("{} * {}", v0.expression, v1.expression);
+                break;
+            }
 
         case AluVectorOpcode::Max:
         case AluVectorOpcode::MaxA:
-            print("max({}, {})", op(VECTOR_0), op(VECTOR_1));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                operationResultComponentCount = std::max(v0.componentCount, v1.componentCount);
+
+                print("max({}, {})", v0.expression, v1.expression);
+                break;
+            }
 
         case AluVectorOpcode::Min:
-            print("min({}, {})", op(VECTOR_0), op(VECTOR_1));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                operationResultComponentCount = std::max(v0.componentCount, v1.componentCount);
+
+                print("min({}, {})", v0.expression, v1.expression);
+                break;
+            }
 
         case AluVectorOpcode::Seq:
-            print("{} == {}", op(VECTOR_0), op(VECTOR_1));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                operationResultComponentCount = std::max(v0.componentCount, v1.componentCount);
+
+                print("{} == {}", v0.expression, v1.expression);
+                break;
+            }
 
         case AluVectorOpcode::Sgt:
-            print("{} > {}", op(VECTOR_0), op(VECTOR_1));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                operationResultComponentCount = std::max(v0.componentCount, v1.componentCount);
+
+                print("{} > {}", v0.expression, v1.expression);
+                break;
+            }
 
         case AluVectorOpcode::Sge:
-            print("{} >= {}", op(VECTOR_0), op(VECTOR_1));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                operationResultComponentCount = std::max(v0.componentCount, v1.componentCount);
+
+                print("{} >= {}", v0.expression, v1.expression);
+                break;
+            }
 
         case AluVectorOpcode::Sne:
-            print("{} != {}", op(VECTOR_0), op(VECTOR_1));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                operationResultComponentCount = std::max(v0.componentCount, v1.componentCount);
+
+                print("{} != {}", v0.expression, v1.expression);
+                break;
+            }
 
         case AluVectorOpcode::Frc:
-            print("frac({})", op(VECTOR_0));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                operationResultComponentCount = v0.componentCount;
+
+                print("frac({})", v0.expression);
+                break;
+            }
 
         case AluVectorOpcode::Trunc:
-            print("trunc({})", op(VECTOR_0));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                operationResultComponentCount = v0.componentCount;
+
+                print("trunc({})", v0.expression);
+                break;
+            }
 
         case AluVectorOpcode::Floor:
-            print("floor({})", op(VECTOR_0));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                operationResultComponentCount = v0.componentCount;
+
+                print("floor({})", v0.expression);
+                break;
+            }
 
         case AluVectorOpcode::Mad:
-            print("{} * {} + {}", op(VECTOR_0), op(VECTOR_1), op(VECTOR_2));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                auto v2 = op(VECTOR_2);
+                operationResultComponentCount = std::max(std::max(v0.componentCount, v1.componentCount), v2.componentCount);
+
+                print("{} * {} + {}", v0.expression, v1.expression, v2.expression);
+                break;
+            }
 
         case AluVectorOpcode::CndEq:
-            print("select({} == 0.0, {}, {})", op(VECTOR_0), op(VECTOR_1), op(VECTOR_2));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                auto v2 = op(VECTOR_2);
+                operationResultComponentCount = std::max(v1.componentCount, v2.componentCount);
+
+                print("selectWrapper({} == 0.0, {}, {})", v0.expression, v1.expression, v2.expression);
+                break;
+            }
 
         case AluVectorOpcode::CndGe:
-            print("select({} >= 0.0, {}, {})", op(VECTOR_0), op(VECTOR_1), op(VECTOR_2));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                auto v2 = op(VECTOR_2);
+                operationResultComponentCount = std::max(v1.componentCount, v2.componentCount);
+
+                print("selectWrapper({} >= 0.0, {}, {})", v0.expression, v1.expression, v2.expression);
+                break;
+            }
 
         case AluVectorOpcode::CndGt:
-            print("select({} > 0.0, {}, {})", op(VECTOR_0), op(VECTOR_1), op(VECTOR_2));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                auto v1 = op(VECTOR_1);
+                auto v2 = op(VECTOR_2);
+                operationResultComponentCount = std::max(v1.componentCount, v2.componentCount);
+
+                print("selectWrapper({} > 0.0, {}, {})", v0.expression, v1.expression, v2.expression);
+                break;
+            }
 
         case AluVectorOpcode::Dp4:
         case AluVectorOpcode::Dp3:
-            print("dot({}, {})", op(VECTOR_0), op(VECTOR_1));
+            operationResultComponentCount = 1;
+            print("dot({}, {})", op(VECTOR_0).expression, op(VECTOR_1).expression);
             break;
 
         case AluVectorOpcode::Dp2Add:
-            print("dot({}, {}) + {}", op(VECTOR_0), op(VECTOR_1), op(VECTOR_2));
-            break;
+            {
+                auto v2 = op(VECTOR_2);
+                operationResultComponentCount = v2.componentCount;
+
+                print("dot({}, {}) + {}", op(VECTOR_0).expression, op(VECTOR_1).expression, v2.expression);
+                break;
+            }
 
         case AluVectorOpcode::Cube:
+            operationResultComponentCount = 4;
+            println("\n#ifdef __air__");
+            indent();
+            print("cube(r{}, &cubeMapData)", instr.src1Register);
+            println("\n#else");
+            indent();
             print("cube(r{}, cubeMapData)", instr.src1Register);
+            println("\n#endif");
             break;
 
         case AluVectorOpcode::Max4:
-            print("max4({})", op(VECTOR_0));
+            operationResultComponentCount = 4;
+            print("max4({})", op(VECTOR_0).expression);
             break;
 
         case AluVectorOpcode::SetpEqPush:
         case AluVectorOpcode::SetpNePush:
         case AluVectorOpcode::SetpGtPush:
         case AluVectorOpcode::SetpGePush:
-            print("p0 ? 0.0 : {} + 1.0", op(VECTOR_0));
-            break;
+            {
+                auto v0 = op(VECTOR_0);
+                operationResultComponentCount = v0.componentCount;
+
+                print("p0 ? 0.0 : {} + 1.0", v0.expression);
+                break;
+            }
 
         case AluVectorOpcode::KillEq:
-            print("any({} == {})", op(VECTOR_0), op(VECTOR_1));
+            operationResultComponentCount = 1;
+            print("any({} == {})", op(VECTOR_0).expression, op(VECTOR_1).expression);
             break;
 
         case AluVectorOpcode::KillGt:
-            print("any({} > {})", op(VECTOR_0), op(VECTOR_1));
+            operationResultComponentCount = 1;
+            print("any({} > {})", op(VECTOR_0).expression, op(VECTOR_1).expression);
             break;
 
         case AluVectorOpcode::KillGe:
-            print("any({} >= {})", op(VECTOR_0), op(VECTOR_1));
+            operationResultComponentCount = 1;
+            print("any({} >= {})", op(VECTOR_0).expression, op(VECTOR_1).expression);
             break;
 
         case AluVectorOpcode::KillNe:
-            print("any({} != {})", op(VECTOR_0), op(VECTOR_1));
+            operationResultComponentCount = 1;
+            print("any({} != {})", op(VECTOR_0).expression, op(VECTOR_1).expression);
             break;
 
         case AluVectorOpcode::Dst:
-            print("dst({}, {})", op(VECTOR_0), op(VECTOR_1));
+            operationResultComponentCount = 4;
+            print("dst({}, {})", op(VECTOR_0).expression, op(VECTOR_1).expression);
             break;
         }
+
+		out += ")";
+
+        if (operationResultComponentCount > vectorWriteSize) {
+            if (vectorWriteSize == 1) {
+                out += ".x";
+            } else if (vectorWriteSize == 2) {
+                out += ".xy";
+            } else if (vectorWriteSize == 3) {
+                out += ".xyz";
+            }
+        }
+
+        out += ")";
 
         if (instr.vectorSaturate)
             out += ')';
@@ -815,27 +1005,27 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
             switch (instr.scalarOpcode)
             {
             case AluScalarOpcode::SetpEq:
-                print("{} == 0.0", op(SCALAR_0));
+                print("{} == 0.0", op(SCALAR_0).expression);
                 break;
 
             case AluScalarOpcode::SetpNe:
-                print("{} != 0.0", op(SCALAR_0));
+                print("{} != 0.0", op(SCALAR_0).expression);
                 break;
 
             case AluScalarOpcode::SetpGt:
-                print("{} > 0.0", op(SCALAR_0));
+                print("{} > 0.0", op(SCALAR_0).expression);
                 break;
 
             case AluScalarOpcode::SetpGe:
-                print("{} >= 0.0", op(SCALAR_0));
+                print("{} >= 0.0", op(SCALAR_0).expression);
                 break;
 
             case AluScalarOpcode::SetpInv:
-                print("{} == 1.0", op(SCALAR_0));
+                print("{} == 1.0", op(SCALAR_0).expression);
                 break;
 
             case AluScalarOpcode::SetpPop:
-                print("{} - 1.0 <= 0.0", op(SCALAR_0));
+                print("{} - 1.0 <= 0.0", op(SCALAR_0).expression);
                 break;
 
             case AluScalarOpcode::SetpClr:
@@ -843,7 +1033,7 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
                 break;
 
             case AluScalarOpcode::SetpRstr:
-                print("{} == 0.0", op(SCALAR_0));
+                print("{} == 0.0", op(SCALAR_0).expression);
                 break;
             }
 
@@ -853,92 +1043,92 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
         indent();
         out += "ps = ";
         if (instr.scalarSaturate)
-            out += "saturate(";
+            out += "saturate((float)(";
 
         switch (instr.scalarOpcode)
         {
         case AluScalarOpcode::Adds:
-            print("{} + {}", op(SCALAR_0), op(SCALAR_1));
+            print("{} + {}", op(SCALAR_0).expression, op(SCALAR_1).expression);
             break;
 
         case AluScalarOpcode::AddsPrev:
-            print("{} + ps", op(SCALAR_0));
+            print("{} + ps", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Muls:
-            print("{} * {}", op(SCALAR_0), op(SCALAR_1));
+            print("{} * {}", op(SCALAR_0).expression, op(SCALAR_1).expression);
             break;
 
         case AluScalarOpcode::MulsPrev:
         case AluScalarOpcode::MulsPrev2:
-            print("{} * ps", op(SCALAR_0));
+            print("{} * ps", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Maxs:
         case AluScalarOpcode::MaxAs:
         case AluScalarOpcode::MaxAsf:
-            print("max({}, {})", op(SCALAR_0), op(SCALAR_1));
+            print("max({}, {})", op(SCALAR_0).expression, op(SCALAR_1).expression);
             break;
 
         case AluScalarOpcode::Mins:
-            print("min({}, {})", op(SCALAR_0), op(SCALAR_1));
+            print("min({}, {})", op(SCALAR_0).expression, op(SCALAR_1).expression);
             break;
 
         case AluScalarOpcode::Seqs:
-            print("{} == 0.0", op(SCALAR_0));
+            print("{} == 0.0", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Sgts:
-            print("{} > 0.0", op(SCALAR_0));
+            print("{} > 0.0", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Sges:
-            print("{} >= 0.0", op(SCALAR_0));
+            print("{} >= 0.0", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Snes:
-            print("{} != 0.0", op(SCALAR_0));
+            print("{} != 0.0", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Frcs:
-            print("frac({})", op(SCALAR_0));
+            print("frac({})", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Truncs:
-            print("trunc({})", op(SCALAR_0));
+            print("trunc({})", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Floors:
-            print("floor({})", op(SCALAR_0));
+            print("floor({})", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Exp:
-            print("exp2({})", op(SCALAR_0));
+            print("exp2({})", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Logc:
         case AluScalarOpcode::Log:
-            print("clamp(log2({}), FLT_MIN, FLT_MAX)", op(SCALAR_0));
+            print("clamp(log2({}), -FLT_MAX, FLT_MAX)", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Rcpc:
         case AluScalarOpcode::Rcpf:
         case AluScalarOpcode::Rcp:
-            print("clamp(rcp({}), FLT_MIN, FLT_MAX)", op(SCALAR_0));
+            print("clamp(rcp({}), -FLT_MAX, FLT_MAX)", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Rsqc:
         case AluScalarOpcode::Rsqf:
         case AluScalarOpcode::Rsq:
-            print("clamp(rsqrt({}), FLT_MIN, FLT_MAX)", op(SCALAR_0));
+            print("clamp(rsqrt({}), -FLT_MAX, FLT_MAX)", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Subs:
-            print("{} - {}", op(SCALAR_0), op(SCALAR_1));
+            print("{} - {}", op(SCALAR_0).expression, op(SCALAR_1).expression);
             break;
 
         case AluScalarOpcode::SubsPrev:
-            print("{} - ps", op(SCALAR_0));
+            print("{} - ps", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::SetpEq:
@@ -949,11 +1139,11 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
             break;
 
         case AluScalarOpcode::SetpInv:
-            print("{0} == 0.0 ? 1.0 : {0}", op(SCALAR_0));
+            print("p0 ? 0.0 : {0} == 0.0 ? 1.0 : {0}", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::SetpPop:
-            print("p0 ? 0.0 : ({} - 1.0)", op(SCALAR_0));
+            print("p0 ? 0.0 : ({} - 1.0)", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::SetpClr:
@@ -961,59 +1151,59 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
             break;
 
         case AluScalarOpcode::SetpRstr:
-            print("p0 ? 0.0 : {}", op(SCALAR_0));
+            print("p0 ? 0.0 : {}", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::KillsEq:
-            print("{} == 0.0", op(SCALAR_0));
+            print("{} == 0.0", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::KillsGt:
-            print("{} > 0.0", op(SCALAR_0));
+            print("{} > 0.0", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::KillsGe:
-            print("{} >= 0.0", op(SCALAR_0));
+            print("{} >= 0.0", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::KillsNe:
-            print("{} != 0.0", op(SCALAR_0));
+            print("{} != 0.0", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::KillsOne:
-            print("{} == 1.0", op(SCALAR_0));
+            print("{} == 1.0", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Sqrt:
-            print("sqrt({})", op(SCALAR_0));
+            print("sqrt({})", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Mulsc0:
         case AluScalarOpcode::Mulsc1:
-            print("{} * {}", op(SCALAR_CONSTANT_0), op(SCALAR_CONSTANT_1));
+            print("{} * {}", op(SCALAR_CONSTANT_0).expression, op(SCALAR_CONSTANT_1).expression);
             break;
 
         case AluScalarOpcode::Addsc0:
         case AluScalarOpcode::Addsc1:
-            print("{} + {}", op(SCALAR_CONSTANT_0), op(SCALAR_CONSTANT_1));
+            print("{} + {}", op(SCALAR_CONSTANT_0).expression, op(SCALAR_CONSTANT_1).expression);
             break;
 
         case AluScalarOpcode::Subsc0:
         case AluScalarOpcode::Subsc1:
-            print("{} - {}", op(SCALAR_CONSTANT_0), op(SCALAR_CONSTANT_1));
+            print("{} - {}", op(SCALAR_CONSTANT_0).expression, op(SCALAR_CONSTANT_1).expression);
             break;
 
         case AluScalarOpcode::Sin:
-            print("sin({})", op(SCALAR_0));
+            print("sin({})", op(SCALAR_0).expression);
             break;
 
         case AluScalarOpcode::Cos:
-            print("cos({})", op(SCALAR_0));
+            print("cos({})", op(SCALAR_0).expression);
             break;
         }
 
         if (instr.scalarSaturate)
-            out += ')';
+            out += "))";
 
         out += ";\n";
 
@@ -1021,11 +1211,11 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
         {
         case AluScalarOpcode::MaxAs:
             indent();
-            println("a0 = (int)clamp(floor({} + 0.5), -256.0, 255.0);", op(SCALAR_0));
+            println("a0 = (int)clamp(floor({} + 0.5), -256.0, 255.0);", op(SCALAR_0).expression);
             break;     
         case AluScalarOpcode::MaxAsf:
             indent();
-            println("a0 = (int)clamp(floor({}), -256.0, 255.0);", op(SCALAR_0));
+            println("a0 = (int)clamp(floor({}), -256.0, 255.0);", op(SCALAR_0).expression);
             break;
         }
     }
@@ -1040,7 +1230,8 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
         if (!exportRegister.empty())
         {
             out += exportRegister;
-            out += '.';
+            if (vectorRegister)
+                out += '.';
         }
         else
         {
@@ -1049,7 +1240,7 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
 
         for (size_t i = 0; i < 4; i++)
         {
-            if ((scalarWriteMask >> i) & 0x1)
+            if (((scalarWriteMask >> i) & 0x1) && vectorRegister)
                 out += SWIZZLES[i];
         }
 
@@ -1154,7 +1345,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             {
                 uint32_t tailCount = (isPixelShader ? 224 : 256) - constantInfo->registerIndex;
 
-                println("#define {}(INDEX) select((INDEX) < {}, vk::RawBufferLoad<float4>(g_PushConstants.{}ShaderConstants + ({} + min(INDEX, {})) * 16, 0x10), 0.0)",
+                println("#define {}(INDEX) selectWrapper((INDEX) < {}, vk::RawBufferLoad<float4>(g_PushConstants.{}ShaderConstants + ({} + min(INDEX, {})) * 16, 0x10), 0.0)",
                     constantName, tailCount, shaderName, constantInfo->registerIndex.get(), tailCount - 1);
             }
             else
@@ -1178,6 +1369,75 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             }
 
             println("#define {}_SamplerDescriptorIndex vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + {})",
+                constantName, std::size(TEXTURE_DIMENSIONS) * 64 + constantInfo->registerIndex * 4);
+
+            samplers.emplace(constantInfo->registerIndex, constantName);
+            break;
+        }
+
+        }
+    }
+
+    out += "\n#elif defined(__air__)\n\n";
+
+    for (uint32_t i = 0; i < constantTableContainer->constantTable.constants; i++)
+    {
+        const auto constantInfo = reinterpret_cast<const ConstantInfo*>(
+            constantTableData + constantTableContainer->constantTable.constantInfo + i * sizeof(ConstantInfo));
+
+        const char* constantName = reinterpret_cast<const char*>(constantTableData + constantInfo->name);
+
+    #ifdef UNLEASHED_RECOMP
+        if (!isPixelShader)
+        {
+            if (strcmp(constantName, "g_MtxProjection") == 0)
+                hasMtxProjection = true;
+            else if (strcmp(constantName, "g_InstanceTypes") == 0)
+                isMetaInstancer = true;
+            else if (strcmp(constantName, "g_IndexCount") == 0)
+                hasIndexCount = true;
+        }
+        else
+        {
+            if (strcmp(constantName, "g_MtxPrevInvViewProjection") == 0)
+                hasMtxPrevInvViewProjection = true;
+        }
+    #endif
+
+        switch (constantInfo->registerSet)
+        {
+        case RegisterSet::Float4:
+        {
+            const char* shaderName = isPixelShader ? "Pixel" : "Vertex";
+
+            if (constantInfo->registerCount > 1)
+            {
+                uint32_t tailCount = (isPixelShader ? 224 : 256) - constantInfo->registerIndex;
+
+                println("#define {}(INDEX) selectWrapper((INDEX) < {}, (*(reinterpret_cast<device float4*>(g_PushConstants.{}ShaderConstants + ({} + min(INDEX, {})) * 16))), 0.0)",
+                    constantName, tailCount, shaderName, constantInfo->registerIndex.get(), tailCount - 1);
+            }
+            else
+            {
+                println("#define {} (*(reinterpret_cast<device float4*>(g_PushConstants.{}ShaderConstants + {})))",
+                    constantName, shaderName, constantInfo->registerIndex * 16);
+            }
+
+            for (uint16_t j = 0; j < constantInfo->registerCount; j++)
+                float4Constants.emplace(constantInfo->registerIndex + j, constantInfo);
+
+            break;
+        }
+
+        case RegisterSet::Sampler:
+        {
+            for (size_t j = 0; j < std::size(TEXTURE_DIMENSIONS); j++)
+            {
+                println("#define {}_Texture{}DescriptorIndex (*(reinterpret_cast<device uint*>(g_PushConstants.SharedConstants + {})))",
+                    constantName, TEXTURE_DIMENSIONS[j], j * 64 + constantInfo->registerIndex * 4);
+            }
+
+            println("#define {}_SamplerDescriptorIndex (*(reinterpret_cast<device uint*>(g_PushConstants.SharedConstants + {})))",
                 constantName, std::size(TEXTURE_DIMENSIONS) * 64 + constantInfo->registerIndex * 4);
 
             samplers.emplace(constantInfo->registerIndex, constantName);
@@ -1211,7 +1471,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             if (constantInfo->registerCount > 1)
             {
                 uint32_t tailCount = (isPixelShader ? 224 : 256) - constantInfo->registerIndex;
-                println("#define {0}(INDEX) select((INDEX) < {1}, {0}[min(INDEX, {2})], 0.0)", constantName, tailCount, tailCount - 1);
+                println("#define {0}(INDEX) selectWrapper((INDEX) < {1}, {0}[min(INDEX, {2})], 0.0)", constantName, tailCount, tailCount - 1);
             }
         }
     }
@@ -1254,7 +1514,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
         if (constantInfo->registerSet == RegisterSet::Bool)
         {
             const char* constantName = reinterpret_cast<const char*>(constantTableData + constantInfo->name);
-            println("\t#define {} (1 << {})", constantName, constantInfo->registerIndex + (isPixelShader ? 16 : 0));
+            println("#define {} (1 << {})", constantName, constantInfo->registerIndex + (isPixelShader ? 16 : 0));
             boolConstants.emplace(constantInfo->registerIndex, constantName);
         }
     }
@@ -1263,45 +1523,79 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
     const auto shader = reinterpret_cast<const Shader*>(shaderData + shaderContainer->shaderOffset);
 
-    out += "#ifndef __spirv__\n";
-
-    if (isPixelShader)
-        out += "[shader(\"pixel\")]\n";
-    else
-        out += "[shader(\"vertex\")]\n";
-
-    out += "#endif\n";
-
-    out += "void main(\n";
+    println("struct {}", isPixelShader ? "Interpolators" : "VertexShaderInput");
+    out += "{\n";
 
     if (isPixelShader)
     {
-        out += "\tin float4 iPos : SV_Position,\n";
+        out += "#ifdef __air__\n";
+
+        out += "\tfloat4 iPos [[position]];\n";
 
         for (auto& [usage, usageIndex] : INTERPOLATORS)
-            println("\tin float4 i{0}{1} : {2}{1},", USAGE_VARIABLES[uint32_t(usage)], usageIndex, USAGE_SEMANTICS[uint32_t(usage)]);
+            println("\tfloat4 i{0}{1} [[user({2}{1})]];", USAGE_VARIABLES[uint32_t(usage)], usageIndex, USAGE_SEMANTICS[uint32_t(usage)]);
 
-        out += "#ifdef __spirv__\n";
-        out += "\tin bool iFace : SV_IsFrontFace\n";
         out += "#else\n";
-        out += "\tin uint iFace : SV_IsFrontFace\n";
-        out += "#endif\n";
 
-        auto pixelShader = reinterpret_cast<const PixelShader*>(shader);
-        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR0)
-            out += ",\n\tout float4 oC0 : SV_Target0";
-        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR1)
-            out += ",\n\tout float4 oC1 : SV_Target1";
-        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR2)
-            out += ",\n\tout float4 oC2 : SV_Target2";
-        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR3)
-            out += ",\n\tout float4 oC3 : SV_Target3";
-        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_DEPTH)
-            out += ",\n\tout float oDepth : SV_Depth";
+        out += "\tfloat4 iPos : SV_Position;\n";
+
+        for (auto& [usage, usageIndex] : INTERPOLATORS)
+            println("\tfloat4 i{0}{1} : {2}{1};", USAGE_VARIABLES[uint32_t(usage)], usageIndex, USAGE_SEMANTICS[uint32_t(usage)]);
+
+        out += "#endif\n";
     }
     else
     {
         auto vertexShader = reinterpret_cast<const VertexShader*>(shader);
+
+        out += "#ifdef __air__\n";
+
+        for (uint32_t i = 0; i < vertexShader->vertexElementCount; i++)
+        {
+            union
+            {
+                VertexElement vertexElement;
+                uint32_t value;
+            };
+
+            value = vertexShader->vertexElementsAndInterpolators[vertexShader->field18 + i];
+
+            const char* usageType = USAGE_TYPES[uint32_t(vertexElement.usage)];
+
+        #ifdef UNLEASHED_RECOMP
+            if ((vertexElement.usage == DeclUsage::TexCoord && vertexElement.usageIndex == 2 && isMetaInstancer) ||
+                (vertexElement.usage == DeclUsage::Position && vertexElement.usageIndex == 1))
+            {
+                usageType = "uint4";
+            }
+        #endif
+
+            out += '\t';
+
+            print("{0} i{1}{2}", usageType, USAGE_VARIABLES[uint32_t(vertexElement.usage)],
+                uint32_t(vertexElement.usageIndex));
+
+            bool foundUsage = false;
+            for (auto& usageLocation : USAGE_LOCATIONS)
+            {
+                if (usageLocation.usage == vertexElement.usage && usageLocation.usageIndex == vertexElement.usageIndex)
+                {
+                    println(" [[attribute({})]];", usageLocation.location);
+                    foundUsage = true;
+                    break;
+                }
+            }
+
+            if (!foundUsage) {
+                fmt::println("Missing mapping for vertex element usage: {} {}", USAGE_VARIABLES[uint32_t(vertexElement.usage)], uint32_t(vertexElement.usageIndex));
+                exit(1);
+            }
+
+            vertexElements.emplace(uint32_t(vertexElement.address), vertexElement);
+        }
+
+        out += "#else\n";
+
         for (uint32_t i = 0; i < vertexShader->vertexElementCount; i++)
         {
             union
@@ -1333,40 +1627,159 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                 }
             }
 
-            println("in {0} i{1}{2} : {3}{2},", usageType, USAGE_VARIABLES[uint32_t(vertexElement.usage)],
+            println("{0} i{1}{2} : {3}{2};", usageType, USAGE_VARIABLES[uint32_t(vertexElement.usage)],
                 uint32_t(vertexElement.usageIndex), USAGE_SEMANTICS[uint32_t(vertexElement.usage)]);
-
-            vertexElements.emplace(uint32_t(vertexElement.address), vertexElement);
         }
+
+        out += "#endif\n";
+    }
+
+    out += "};\n";
+
+    println("struct {}", isPixelShader ? "PixelShaderOutput" : "Interpolators");
+    out += "{\n";
+
+    if (isPixelShader)
+    {
+        out += "#ifdef __air__\n";
+
+        auto pixelShader = reinterpret_cast<const PixelShader*>(shader);
+        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR0)
+            out += "\tfloat4 oC0 [[color(0)]];\n";
+        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR1)
+            out += "\tfloat4 oC1 [[color(1)]];\n";
+        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR2)
+            out += "\tfloat4 oC2 [[color(2)]];\n";
+        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR3)
+            out += "\tfloat4 oC3 [[color(3)]];\n";
+        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_DEPTH)
+            out += "\tfloat oDepth [[depth(any)]];\n";
+
+        out += "#else\n";
+
+        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR0)
+            out += "\tfloat4 oC0 : SV_Target0;\n";
+        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR1)
+            out += "\tfloat4 oC1 : SV_Target1;\n";
+        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR2)
+            out += "\tfloat4 oC2 : SV_Target2;\n";
+        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_COLOR3)
+            out += "\tfloat4 oC3 : SV_Target3;\n";
+        if (pixelShader->outputs & PIXEL_SHADER_OUTPUT_DEPTH)
+            out += "\tfloat oDepth : SV_Depth;\n";
+
+        out += "#endif\n";
+    }
+    else
+    {
+        out += "#ifdef __air__\n";
+
+        out += "\tfloat4 oPos [[position]] [[invariant]];\n";
+
+        for (auto& [usage, usageIndex] : INTERPOLATORS)
+            print("\tfloat4 o{0}{1} [[user({2}{1})]];\n", USAGE_VARIABLES[uint32_t(usage)], usageIndex, USAGE_SEMANTICS[uint32_t(usage)]);
+
+        out += "#else\n";
+
+        out += "\tprecise float4 oPos : SV_Position;\n";
+
+        for (auto& [usage, usageIndex] : INTERPOLATORS)
+            print("\tfloat4 o{0}{1} : {2}{1};\n", USAGE_VARIABLES[uint32_t(usage)], usageIndex, USAGE_SEMANTICS[uint32_t(usage)]);
+
+        out += "#endif\n";
+    }
+
+    out += "};\n";
+
+    out += "#ifdef __air__\n";
+
+    if (isPixelShader)
+        out += "[[fragment]]\n";
+    else
+        out += "[[vertex]]\n";
+
+    out += "#elif !defined(__spirv__)\n";
+
+    if (isPixelShader)
+        out += "[shader(\"pixel\")]\n";
+    else
+        out += "[shader(\"vertex\")]\n";
+
+    out += "#endif\n";
+
+    println("{} shaderMain(", isPixelShader ? "PixelShaderOutput" : "Interpolators");
+
+    if (isPixelShader)
+    {
+        out += "#ifdef __air__\n";
+
+        out += "\tInterpolators input [[stage_in]],\n";
+        out += "\tbool iFace [[front_facing]],\n";
+
+        out += "\tconstant Texture2DDescriptorHeap* g_Texture2DDescriptorHeap [[buffer(0)]],\n";
+        out += "\tconstant Texture3DDescriptorHeap* g_Texture3DDescriptorHeap [[buffer(1)]],\n";
+        out += "\tconstant TextureCubeDescriptorHeap* g_TextureCubeDescriptorHeap [[buffer(2)]],\n";
+        out += "\tconstant SamplerDescriptorHeap* g_SamplerDescriptorHeap [[buffer(3)]],\n";
+        out += "\tconstant PushConstants& g_PushConstants [[buffer(8)]]\n";
+
+        out += "#else\n";
+
+        out += "\tInterpolators input,\n";
+
+        out += "#ifdef __spirv__\n";
+        out += "\tin bool iFace : SV_IsFrontFace\n";
+        out += "#else\n";
+        out += "\tin uint iFace : SV_IsFrontFace\n";
+        out += "#endif\n";
+
+        out += "\n#endif\n";
+    }
+    else
+    {
+        out += "#ifdef __air__\n";
+        out += "\tconstant PushConstants& g_PushConstants [[buffer(8)]],\n";
+        out += "\tVertexShaderInput input [[stage_in]]\n";
+        out += "#else\n";
+        out += "\tVertexShaderInput input\n";
+        out += "#endif\n";
 
     #ifdef UNLEASHED_RECOMP
         if (hasIndexCount)
         {
+            out += "\t,\n";
+            out += "#ifdef __air__\n";
+            out += "\tuint iVertexId [[vertex_id]],\n";
+            out += "\tuint iInstanceId [[instance_id]]\n";
+            out += "#else\n";
             out += "\tin uint iVertexId : SV_VertexID,\n";
-            out += "\tin uint iInstanceId : SV_InstanceID,\n";
+            out += "\tin uint iInstanceId : SV_InstanceID\n";
+            out += "#endif\n";
         }
     #endif
-
-        out += "\tout float4 oPos : SV_Position";
-
-        for (auto& [usage, usageIndex] : INTERPOLATORS)
-            print(",\n\tout float4 o{0}{1} : {2}{1}", USAGE_VARIABLES[uint32_t(usage)], usageIndex, USAGE_SEMANTICS[uint32_t(usage)]);
     }
 
     out += ")\n";
     out += "{\n";
+
+    std::string outputName = isPixelShader ? "PixelShaderOutput" : "Interpolators";
+
+    out += "#ifdef __air__\n";
+    println("\t{0} output = {0}{{}};", outputName);
+    out += "#else\n";
+    println("\t{0} output = ({0})0;", outputName);
+    out += "#endif\n";
 
 #ifdef UNLEASHED_RECOMP
     if (hasMtxProjection)
     {
         specConstantsMask |= SPEC_CONSTANT_REVERSE_Z;
 
-        out += "\toPos = 0.0;\n";
+        out += "\toutput.oPos = 0.0;\n";
 
         out += "\tfloat4x4 mtxProjection = float4x4(g_MtxProjection(0), g_MtxProjection(1), g_MtxProjection(2), g_MtxProjection(3));\n";
         out += "\tfloat4x4 mtxProjectionReverseZ = mul(mtxProjection, float4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 1, 1));\n";
 
-        out += "\t[unroll] for (int iterationIndex = 0; iterationIndex < 2; iterationIndex++)\n";
+        out += "\tUNROLL for (int iterationIndex = 0; iterationIndex < 2; iterationIndex++)\n";
         out += "\t{\n";
     }
 #endif
@@ -1381,8 +1794,13 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             auto value = reinterpret_cast<const be<uint32_t>*>(shaderData + shaderContainer->virtualSize + definition->physicalOffset);
             for (uint16_t i = 0; i < (definition->count + 3) / 4; i++)
             {
+                println("#ifdef __air__");
+                println("\tfloat4 c{} = as_type<float4>(uint4(0x{:X}, 0x{:X}, 0x{:X}, 0x{:X}));",
+                    definition->registerIndex + i - (isPixelShader ? 256 : 0), value[0].get(), value[1].get(), value[2].get(), value[3].get());
+                println("#else");
                 println("\tfloat4 c{} = asfloat(uint4(0x{:X}, 0x{:X}, 0x{:X}, 0x{:X}));",
                     definition->registerIndex + i - (isPixelShader ? 256 : 0), value[0].get(), value[1].get(), value[2].get(), value[3].get());
+                println("#endif");
 
                 value += 4;
             }
@@ -1433,14 +1851,14 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
         if (isPixelShader)
         {
             value = reinterpret_cast<const PixelShader*>(shader)->interpolators[i];
-            println("\tfloat4 r{} = i{}{};", uint32_t(interpolator.reg), USAGE_VARIABLES[uint32_t(interpolator.usage)], uint32_t(interpolator.usageIndex));
+            println("\tfloat4 r{} = input.i{}{};", uint32_t(interpolator.reg), USAGE_VARIABLES[uint32_t(interpolator.usage)], uint32_t(interpolator.usageIndex));
             printedRegisters[interpolator.reg] = true;
         }
         else
         {
             auto vertexShader = reinterpret_cast<const VertexShader*>(shader);
             value = vertexShader->vertexElementsAndInterpolators[vertexShader->field18 + vertexShader->vertexElementCount + i];
-            interpolators.emplace(i, fmt::format("o{}{}", USAGE_VARIABLES[uint32_t(interpolator.usage)], uint32_t(interpolator.usageIndex)));
+            interpolators.emplace(i, fmt::format("output.o{}{}", USAGE_VARIABLES[uint32_t(interpolator.usage)], uint32_t(interpolator.usageIndex)));
         }
     }
 
@@ -1448,11 +1866,11 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
     {
     #ifdef UNLEASHED_RECOMP
         if (!hasMtxProjection)
-            out += "\toPos = 0.0;\n";
+            out += "\toutput.oPos = 0.0;\n";
     #endif
 
         for (auto& [usage, usageIndex] : INTERPOLATORS)
-            println("\to{}{} = 0.0;", USAGE_VARIABLES[uint32_t(usage)], usageIndex);
+            println("\toutput.o{}{} = 0.0;", USAGE_VARIABLES[uint32_t(usage)], usageIndex);
 
         out += "\n";
     }
@@ -1464,7 +1882,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             print("\tfloat4 r{} = ", i);
             if (isPixelShader && i == ((shader->fieldC >> 8) & 0xFF))
             {
-                out += "float4((iPos.xy - 0.5) * float2(iFace ? 1.0 : -1.0, 1.0), 0.0, 0.0);\n";
+                out += "float4((input.iPos.xy - 0.5) * float2(iFace ? 1.0 : -1.0, 1.0), 0.0, 0.0);\n";
             }
         #ifdef UNLEASHED_RECOMP
             else if (!isPixelShader && hasIndexCount && i == 0)
@@ -1488,7 +1906,11 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 #ifdef UNLEASHED_RECOMP
         out += "\tfloat2 pixelCoord = 0.0;\n";
 #endif
+        out += "#ifdef __air__\n";
+        out += "\tCubeMapData cubeMapData = CubeMapData{};\n";
+        out += "#else\n";
         out += "\tCubeMapData cubeMapData = (CubeMapData)0;\n";
+        out += "#endif\n";
     }
 
     const be<uint32_t>* code = reinterpret_cast<const be<uint32_t>*>(shaderData + shaderContainer->virtualSize + shader->physicalOffset);
@@ -1611,7 +2033,6 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             uint32_t count = 0;
             uint32_t sequence = 0;
             bool shouldReturn = false;
-            bool shouldCloseCurlyBracket = false;
 
             switch (cfInstr.opcode)
             {
@@ -1646,7 +2067,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                 {
                     indent();
                 #ifdef UNLEASHED_RECOMP
-                    print("[unroll] ");
+                    print("UNROLL ");
                 #endif
                     println("for (aL = 0; aL < i{}.x; aL++)", uint32_t(cfInstr.loopStart.loopId));
                     indent();
@@ -1754,27 +2175,27 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                             specConstantsMask |= SPEC_CONSTANT_BICUBIC_GI_FILTER;
 
                             indent();
-                            out += "if (g_SpecConstants() & SPEC_CONSTANT_BICUBIC_GI_FILTER)";
+                            out += "if (g_SpecConstants() & SPEC_CONSTANT_BICUBIC_GI_FILTER)\n";
                             indent();
-                            out += '{';
+                            out += "{\n";
 
                             ++indentation;
                             recompile(textureFetch, true);
                             --indentation;
 
                             indent();
-                            out += "}";
+                            out += "}\n";
                             indent();
-                            out += "else";
+                            out += "else\n";
                             indent();
-                            out += '{';
+                            out += "{\n";
 
                             ++indentation;
                             recompile(textureFetch, false);
                             --indentation;
 
                             indent();
-                            out += '}';
+                            out += "}\n";
                         }
                         else
                     #endif
@@ -1799,31 +2220,31 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                     specConstantsMask |= SPEC_CONSTANT_ALPHA_TEST;
 
                     indent();
-                    out += "[branch] if (g_SpecConstants() & SPEC_CONSTANT_ALPHA_TEST)";
+                    out += "BRANCH if (g_SpecConstants() & SPEC_CONSTANT_ALPHA_TEST)\n";
                     indent();
-                    out += '{';
+                    out += "{\n";
 
                     indent();
-                    out += "\tclip(oC0.w - g_AlphaThreshold);\n";
+                    out += "\tclip(output.oC0.w - g_AlphaThreshold);\n";
 
                     indent();
-                    out += "}";
+                    out += "}\n";
 
                 #ifdef UNLEASHED_RECOMP
                     specConstantsMask |= SPEC_CONSTANT_ALPHA_TO_COVERAGE;
 
                     indent();
-                    out += "else if (g_SpecConstants() & SPEC_CONSTANT_ALPHA_TO_COVERAGE)";
+                    out += "else if (g_SpecConstants() & SPEC_CONSTANT_ALPHA_TO_COVERAGE)\n";
                     indent();
-                    out += '{';
+                    out += "{\n";
 
                     indent();
-                    out += "\toC0.w *= 1.0 + computeMipLevel(pixelCoord) * 0.25;\n";
+                    out += "\toutput.oC0.w *= 1.0 + computeMipLevel(pixelCoord) * 0.25;\n";
                     indent();
-                    out += "\toC0.w = 0.5 + (oC0.w - g_AlphaThreshold) / max(fwidth(oC0.w), 1e-6);\n";
+                    out += "\toutput.oC0.w = 0.5 + (output.oC0.w - g_AlphaThreshold) / max(fwidth(output.oC0.w), 1e-6);\n";
 
                     indent();
-                    out += '}';
+                    out += "}\n";
                 #endif
                 }
                 else
@@ -1832,7 +2253,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                     if (!hasMtxProjection)
                 #endif
                     {
-                        out += "\toPos.xy += g_HalfPixelOffset * oPos.w;\n";
+                        out += "\toutput.oPos.xy += g_HalfPixelOffset * output.oPos.w;\n";
                     }
                 }
 
@@ -1847,20 +2268,13 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                     else
                 #endif
                     {
-                        out += "return;\n";
+                        out += "return output;\n";
                     }
                 }
                 else
                 {
                     out += "\t\t\tbreak;\n";
                 }
-            }
-
-            if (shouldCloseCurlyBracket)
-            {
-                --indentation;
-                indent();
-                out += "}\n";
             }
         }
 
@@ -1881,7 +2295,14 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
         out += "\t}\n";
 
     if (!isPixelShader && hasMtxProjection)
-        out += "\toPos.xy += g_HalfPixelOffset * oPos.w;\n";
+        out += "\toutput.oPos.xy += g_HalfPixelOffset * output.oPos.w;\n";
+#endif
+
+    if (!simpleControlFlow)
+        out += "\treturn output;\n";
+#ifdef UNLEASHED_RECOMP
+    else if (hasMtxProjection)
+        out += "\treturn output;\n";
 #endif
 
     out += "}";
