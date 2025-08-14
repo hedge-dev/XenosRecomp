@@ -4,9 +4,13 @@ if (WIN32)
     option(XENOS_RECOMP_DXIL "Generate DXIL shader cache" ON)
 endif()
 
+if (APPLE)
+    option(XENOS_RECOMP_AIR "Generate Metal AIR shader cache" ON)
+endif()
+
 set(SMOLV_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/smol-v/source")
 
-add_executable(XenosRecomp 
+add_executable(XenosRecomp
     constant_table.h
     dxc_compiler.cpp
     dxc_compiler.h
@@ -30,13 +34,6 @@ target_precompile_headers(XenosRecomp PRIVATE pch.h)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     target_compile_options(XenosRecomp PRIVATE -Wno-switch -Wno-unused-variable -Wno-null-arithmetic -fms-extensions)
-
-    include(CheckCXXSymbolExists)
-    check_cxx_symbol_exists(_LIBCPP_VERSION version LIBCPP)
-    if(LIBCPP)
-        # Allows using std::execution
-        target_compile_options(XenosRecomp PRIVATE -fexperimental-library)
-    endif()
 endif()
 
 if (WIN32)
@@ -50,4 +47,9 @@ endif()
 if (XENOS_RECOMP_DXIL)
     target_compile_definitions(XenosRecomp PRIVATE XENOS_RECOMP_DXIL)
     target_link_libraries(XenosRecomp PRIVATE Microsoft::DXIL)
+endif()
+
+if (XENOS_RECOMP_AIR)
+    target_compile_definitions(XenosRecomp PRIVATE XENOS_RECOMP_AIR)
+    target_sources(XenosRecomp PRIVATE air_compiler.cpp air_compiler.h)
 endif()
