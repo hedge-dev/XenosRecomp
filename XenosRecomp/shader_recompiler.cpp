@@ -1118,6 +1118,11 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
     assert((shaderContainer->flags & 0xFFFFFF00) == 0x102A1100);
     assert(shaderContainer->constantTableOffset != NULL);
 
+    // Vertex shaders can't sample with implicit LOD (no derivatives); Xenos
+    // vertex texture fetches read mip 0. Turn the helpers' Sample calls into
+    // SampleLevel(..., 0) for vertex shaders.
+    if ((shaderContainer->flags & 0x1) != 0)
+        out += "#define Sample(s, uv) SampleLevel(s, uv, 0)\n";
     out += include;
     out += '\n';
 
