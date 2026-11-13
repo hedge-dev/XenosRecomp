@@ -327,6 +327,12 @@ void ShaderRecompiler::recompile(const TextureFetchInstruction& instr, bool bicu
 
     out += dimension;
 
+    // Fetches with unnormalized (texel) coordinates.
+    const bool denorm2D = instr.opcode == FetchOpcode::TextureFetch && instr.texCoordDenorm &&
+        instr.dimension == TextureDimension::Texture2D && !bicubic;
+    if (denorm2D)
+        out += "Denorm";
+
 #ifdef UNLEASHED_RECOMP
     if (bicubic)
         out += "Bicubic";
