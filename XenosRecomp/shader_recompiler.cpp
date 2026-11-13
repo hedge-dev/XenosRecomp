@@ -1,3 +1,4 @@
+#include <set>
 #include "shader_recompiler.h"
 #include "shader_common.h"
 
@@ -1302,6 +1303,11 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
     else
     {
         auto vertexShader = reinterpret_cast<const VertexShader*>(shader);
+        // Some shaders fetch the same usage several times (manual fetches of
+        // neighbouring vertices or instance data). Each usage is one input, so
+        // declare it once (a second declaration does not compile).
+        std::set<uint32_t> declaredUsages;
+        bool repeatedUsages = false;
         for (uint32_t i = 0; i < vertexShader->vertexElementCount; i++)
         {
             union
@@ -1311,6 +1317,13 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             };
 
             value = vertexShader->vertexElementsAndInterpolators[vertexShader->field18 + i];
+
+            if (!declaredUsages.insert(uint32_t(vertexElement.usage) | (uint32_t(vertexElement.usageIndex) << 4)).second)
+            {
+                repeatedUsages = true;
+                vertexElements.emplace(uint32_t(vertexElement.address), vertexElement);
+                continue;
+            }
 
             const char* usageType = USAGE_TYPES[uint32_t(vertexElement.usage)];
 
@@ -1338,7 +1351,12 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
 
             vertexElements.emplace(uint32_t(vertexElement.address), vertexElement);
         }
+        if (repeatedUsages)
+            fmt::println(stderr, "NOTE vertex shader with repeated vertex fetch usages (they read the same input)");
 
+    #ifdef REEOT_RECOMP
+        out += "\tin uint iVertexId : SV_VertexID,\n";
+    #endif
     #ifdef UNLEASHED_RECOMP
         if (hasIndexCount)
         {
